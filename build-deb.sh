@@ -72,6 +72,7 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
     "${SUDO[@]}" apt-get update
     "${SUDO[@]}" apt-get install -y \
         build-essential cmake pkg-config git \
+        file \
         libgtkmm-3.0-dev \
         gstreamer1.0-plugins-base \
         gstreamer1.0-plugins-good \
