@@ -1,0 +1,32 @@
+name: Linux DEB
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-deb:
+    name: Build DEB on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Debian package
+        run: ./build-deb.sh --clean
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: radiotray-lite-${{ matrix.os }}-deb
+          path: build-deb/packages/*.deb
+          if-no-files-found: error

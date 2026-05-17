@@ -16,7 +16,7 @@ installed `-dev` versions of the following packages:
 * `libgstreamermm-0.10-2` or `libgstreamermm-1.0`
 * `libcurl3`
 * `libnotify4`
-* `libappindicator3`
+* `libappindicator3` or `libayatana-appindicator3`
 * `libmagic`
 
 To compile program run following (with obvious amendments) commands from build directory:
@@ -25,6 +25,16 @@ To compile program run following (with obvious amendments) commands from build d
 * `$ cpack -G DEB` to create package in `.deb` format or `$ cpack -G RPM` to create package in `.rpm` format.
 
 Package will be created in the `packages` folder of the build directory.
+
+On Debian/Ubuntu systems you can also install dependencies, build, and create
+the Debian package with:
+
+```
+./build-deb.sh --clean
+```
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for notes about legacy AppIndicator,
+Ayatana AppIndicator, and GTK/libadwaita compatibility.
 
 ### Configuration
 #### Bookmarks

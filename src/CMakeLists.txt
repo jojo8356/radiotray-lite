@@ -9,6 +9,19 @@ include_directories(SYSTEM ${CURL_INCLUDE_DIRS})
 include_directories(SYSTEM ${LIBNOTIFY_INCLUDE_DIRS})
 include_directories(SYSTEM ${LIBMAGIC_INCLUDE_DIRS})
 
+link_directories(
+    ${GLIB2_LIBRARY_DIRS}
+    ${LIBXML2_LIBRARY_DIRS}
+    ${APPINDICATOR_LIBRARY_DIRS}
+    ${GTK3_LIBRARY_DIRS}
+    ${GTKMM_LIBRARY_DIRS}
+    ${GSTREAMER_LIBRARY_DIRS}
+    ${GSTREAMERMM_LIBRARY_DIRS}
+    ${CURL_LIBRARY_DIRS}
+    ${LIBNOTIFY_LIBRARY_DIRS}
+    ${LIBMAGIC_LIBRARY_DIRS}
+)
+
 include_directories(SYSTEM third_party)
 
 add_definitions(-Wno-deprecated-declarations)

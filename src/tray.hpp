@@ -11,7 +11,11 @@
 #include <unistd.h>
 
 #include <gtkmm.h>
+#ifdef APPINDICATOR_USE_AYATANA
+#include <libayatana-appindicator/app-indicator.h>
+#else
 #include <libappindicator/app-indicator.h>
+#endif
 
 #include "pugixml/pugixml.hpp"
 
