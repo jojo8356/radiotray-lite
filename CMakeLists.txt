@@ -25,6 +25,8 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "CMAKE_BUILD_TYPE: " ${CMAKE_BUILD_TYPE})
 
+option(RADIOTRAY_REQUIRE_GSTREAMER_BAD "Require gstreamer1.0-plugins-bad in generated packages" OFF)
+
 add_compile_options(-Wall)
 add_compile_options(-Wextra)
 
@@ -69,6 +71,13 @@ set(TARGET_VERSION_MAJOR 0)
 set(TARGET_VERSION_MINOR 2)
 set(TARGET_VERSION_PATCH 19)
 set(APP_VERSION "${TARGET_VERSION_MAJOR}.${TARGET_VERSION_MINOR}.${TARGET_VERSION_PATCH}")
+
+set(RADIOTRAY_DEBIAN_GSTREAMER_PLUGIN_DEPENDS "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good")
+set(RADIOTRAY_RPM_GSTREAMER_PLUGIN_REQUIRES "gstreamer-plugins-base, gstreamer-plugins-good")
+if (RADIOTRAY_REQUIRE_GSTREAMER_BAD)
+    set(RADIOTRAY_DEBIAN_GSTREAMER_PLUGIN_DEPENDS "${RADIOTRAY_DEBIAN_GSTREAMER_PLUGIN_DEPENDS}, gstreamer1.0-plugins-bad")
+    set(RADIOTRAY_RPM_GSTREAMER_PLUGIN_REQUIRES "${RADIOTRAY_RPM_GSTREAMER_PLUGIN_REQUIRES}, gstreamer-plugins-bad-free")
+endif()
 
 add_subdirectory(src)
 

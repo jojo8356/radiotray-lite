@@ -7,6 +7,7 @@ INSTALL_PREFIX="/usr"
 BUILD_TYPE="Release"
 INSTALL_DEPS=1
 CLEAN=0
+WITH_GSTREAMER_BAD=0
 SUDO=()
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -21,6 +22,8 @@ Options:
   --no-install-deps   Skip apt dependency installation
   --clean             Remove the build directory before configuring
   --debug             Build with CMAKE_BUILD_TYPE=Debug
+  --with-gstreamer-bad
+                      Install and require gstreamer1.0-plugins-bad
   -h, --help          Show this help
 EOF
 }
@@ -37,6 +40,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --debug)
             BUILD_TYPE="Debug"
+            shift
+            ;;
+        --with-gstreamer-bad)
+            WITH_GSTREAMER_BAD=1
             shift
             ;;
         -h|--help)
@@ -76,10 +83,13 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
         libgtkmm-3.0-dev \
         gstreamer1.0-plugins-base \
         gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad \
         libcurl4-openssl-dev \
         libnotify-dev \
         libmagic-dev
+
+    if [[ "${WITH_GSTREAMER_BAD}" -eq 1 ]]; then
+        "${SUDO[@]}" apt-get install -y gstreamer1.0-plugins-bad
+    fi
 
     "${SUDO[@]}" apt-get install -y \
         "$(first_available_package libgstreamermm-1.0-dev libgstreamermm-0.10-dev)" \
@@ -92,7 +102,8 @@ fi
 
 cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
+    -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}" \
+    -DRADIOTRAY_REQUIRE_GSTREAMER_BAD="${WITH_GSTREAMER_BAD}"
 
 cmake --build "${BUILD_DIR}" -j"$(nproc)"
 

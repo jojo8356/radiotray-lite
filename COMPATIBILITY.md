@@ -13,6 +13,9 @@ for older and current Debian/Ubuntu releases.
 - GTK: `gtkmm-3.0`
 - AppIndicator: `appindicator3-0.1` or `ayatana-appindicator3-0.1`
 - GStreamer C++ bindings: `gstreamermm-1.0` or legacy `gstreamermm-0.10`
+- GStreamer runtime plugins: `gstreamer1.0-plugins-base` and
+  `gstreamer1.0-plugins-good` by default; `gstreamer1.0-plugins-bad` is
+  optional
 - Packaging: CPack DEB
 
 ## Distribution notes
@@ -44,4 +47,10 @@ If dependencies are already installed:
 
 ```sh
 ./build-deb.sh --no-install-deps --clean
+```
+
+If a target distribution needs codecs or demuxers from the bad plugin set:
+
+```sh
+./build-deb.sh --clean --with-gstreamer-bad
 ```

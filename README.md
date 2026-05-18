@@ -33,6 +33,15 @@ the Debian package with:
 ./build-deb.sh --clean
 ```
 
+The generated packages require `gstreamer1.0-plugins-base` and
+`gstreamer1.0-plugins-good` by default. `gstreamer1.0-plugins-bad` is optional
+because it can be unavailable or temporarily uninstallable on some
+distributions. To build a package that requires it, use:
+
+```
+./build-deb.sh --clean --with-gstreamer-bad
+```
+
 See [COMPATIBILITY.md](COMPATIBILITY.md) for notes about legacy AppIndicator,
 Ayatana AppIndicator, and GTK/libadwaita compatibility.
 
