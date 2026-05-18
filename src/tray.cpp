@@ -3,7 +3,13 @@
 namespace radiotray
 {
 
-RadioTrayLite::BookmarksWalker::BookmarksWalker(RadioTrayLite& radiotray, Gtk::Menu* menu)
+RadioTrayLite::BookmarksWalker::BookmarksWalker(RadioTrayLite& radiotray,
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+                                                GMenu* menu
+#else
+                                                Gtk::Menu* menu
+#endif
+                                                )
     : radiotray(radiotray)
 {
     menus.push(menu);
@@ -33,12 +39,24 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
         adjust_menu_level();
 
         auto group_name = attr_name.as_string();
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+        auto menu_item = g_menu_item_new(group_name, nullptr);
+        auto submenu = g_menu_new();
+
+        g_menu_item_set_submenu(menu_item, G_MENU_MODEL(submenu));
+        g_menu_append_item(menus.top(), menu_item);
+        g_object_unref(menu_item);
+
+        radiotray.owned_submenus.push_back(submenu);
+        menus.push(submenu);
+#else
         auto menu_item = Gtk::manage(new Gtk::MenuItem(group_name));
         auto submenu = Gtk::manage(new Gtk::Menu());
 
         menus.top()->append(*menu_item);
         menu_item->set_submenu(*submenu);
         menus.push(submenu);
+#endif
         level = depth();
 
         LOG(DEBUG) << "Group: " << group_name << ", depth: " << depth();
@@ -49,14 +67,29 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
         auto station_group_name = node.parent().attribute("name").as_string();
 
         if (strncasecmp(station_name, kSeparatorPrefix, kSeparatorPrefixLength) == 0) {
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+            auto section = g_menu_new();
+            g_menu_append_section(menus.top(), nullptr, G_MENU_MODEL(section));
+            radiotray.owned_submenus.push_back(section);
+#else
             auto separator = Gtk::manage(new Gtk::SeparatorMenuItem());
             menus.top()->append(*separator);
+#endif
         } else {
             auto station_url = attr_url.as_string();
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+            radiotray.append_indicator_item(menus.top(),
+                                            station_name,
+                                            IndicatorAction::Type::Station,
+                                            station_group_name,
+                                            station_name,
+                                            station_url);
+#else
             auto sub_item = Gtk::manage(new Gtk::MenuItem(station_name));
             sub_item->signal_activate().connect(sigc::bind<Glib::ustring, Glib::ustring, Glib::ustring>(
                 sigc::mem_fun(radiotray, &RadioTrayLite::on_station_button), station_group_name, station_name, station_url));
             menus.top()->append(*sub_item);
+#endif
         }
 
         LOG(DEBUG) << "Bookmark depth: " << depth() << ", level: " << level << ", #menus: " << menus.size() << ", station: " << station_name
@@ -69,6 +102,16 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
 RadioTrayLite::~RadioTrayLite()
 {
     clear_menu();
+
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    if (actions != nullptr) {
+        g_object_unref(G_OBJECT(actions));
+    }
+
+    if (menu != nullptr) {
+        g_object_unref(G_OBJECT(menu));
+    }
+#endif
 
     if (indicator != nullptr) {
         g_object_unref(G_OBJECT(indicator));
@@ -91,7 +134,12 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
         return false;
     }
 
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    menu = g_menu_new();
+    actions = g_simple_action_group_new();
+#else
     menu = std::make_shared<Gtk::Menu>();
+#endif
 
     player = std::make_shared<Player>();
     player->set_config(config);
@@ -116,8 +164,14 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
     indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
 
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn, kAppName);
+    app_indicator_set_menu(indicator, menu);
+    app_indicator_set_actions(indicator, actions);
+#else
     app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn);
     app_indicator_set_menu(indicator, menu->gobj());
+#endif
 
     initialized = true;
 
@@ -192,6 +246,78 @@ RadioTrayLite::on_current_station_button()
     }
 }
 
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+void
+RadioTrayLite::on_indicator_action(GSimpleAction* /*action*/, GVariant* /*parameter*/, gpointer user_data)
+{
+    auto* data = static_cast<IndicatorAction*>(user_data);
+    auto* radiotray = data->radiotray;
+
+    switch (data->type) {
+    case IndicatorAction::Type::Station:
+        radiotray->on_station_button(data->group_name, data->station_name, data->station_url);
+        break;
+    case IndicatorAction::Type::Reload:
+        radiotray->on_reload_button();
+        break;
+    case IndicatorAction::Type::About:
+        radiotray->on_about_button();
+        break;
+    case IndicatorAction::Type::Quit:
+        radiotray->on_quit_button();
+        break;
+    case IndicatorAction::Type::CurrentStation:
+        radiotray->on_current_station_button();
+        break;
+    }
+}
+
+std::string
+RadioTrayLite::add_indicator_action(IndicatorAction::Type type,
+                                    const Glib::ustring& group_name,
+                                    const Glib::ustring& station_name,
+                                    const Glib::ustring& station_url)
+{
+    auto action_data = std::unique_ptr<IndicatorAction>(new IndicatorAction());
+    action_data->radiotray = this;
+    action_data->type = type;
+    action_data->group_name = group_name;
+    action_data->station_name = station_name;
+    action_data->station_url = station_url;
+
+    std::stringstream name;
+    name << "action" << action_counter++;
+
+    auto simple_action = g_simple_action_new(name.str().c_str(), nullptr);
+    g_signal_connect(simple_action, "activate", G_CALLBACK(&RadioTrayLite::on_indicator_action), action_data.get());
+    g_action_map_add_action(G_ACTION_MAP(actions), G_ACTION(simple_action));
+    g_object_unref(simple_action);
+
+    indicator_actions.push_back(std::move(action_data));
+    return "indicator." + name.str();
+}
+
+void
+RadioTrayLite::append_indicator_item(GMenu* target,
+                                     const Glib::ustring& label,
+                                     IndicatorAction::Type type,
+                                     const Glib::ustring& group_name,
+                                     const Glib::ustring& station_name,
+                                     const Glib::ustring& station_url)
+{
+    auto detailed_action = add_indicator_action(type, group_name, station_name, station_url);
+    auto menu_item = g_menu_item_new(label.c_str(), detailed_action.c_str());
+    g_menu_append_item(target, menu_item);
+    g_object_unref(menu_item);
+}
+
+void
+RadioTrayLite::set_indicator_icon(const char* icon_name)
+{
+    app_indicator_set_icon(indicator, icon_name, kAppName);
+}
+#endif
+
 bool
 RadioTrayLite::resume(bool resume_last_station)
 {
@@ -225,7 +351,11 @@ RadioTrayLite::build_menu()
 {
     auto bookmarks_parsed = parse_bookmarks_file();
     if (bookmarks_parsed) {
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+        BookmarksWalker walker(*this, menu);
+#else
         BookmarksWalker walker(*this, &(*menu));
+#endif
         bookmarks_doc.traverse(walker);
     } else {
         // TODO: notify about parsing errors
@@ -233,6 +363,20 @@ RadioTrayLite::build_menu()
 
     Glib::ustring name;
 
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    auto section = g_menu_new();
+    g_menu_append_section(menu, nullptr, G_MENU_MODEL(section));
+    owned_submenus.push_back(section);
+
+    name = "Reload Bookmarks";
+    append_indicator_item(menu, name, IndicatorAction::Type::Reload);
+
+    name = "About";
+    append_indicator_item(menu, name, IndicatorAction::Type::About);
+
+    name = "Quit";
+    append_indicator_item(menu, name, IndicatorAction::Type::Quit);
+#else
     auto separator_item = Gtk::manage(new Gtk::SeparatorMenuItem());
     menu->append(*separator_item);
 
@@ -253,6 +397,7 @@ RadioTrayLite::build_menu()
 
     separator_item = Gtk::manage(new Gtk::SeparatorMenuItem());
     menu->prepend(*separator_item);
+#endif
 
     set_current_broadcast();
 
@@ -270,6 +415,29 @@ RadioTrayLite::rebuild_menu()
 void
 RadioTrayLite::clear_menu()
 {
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    if (menu) {
+        g_menu_remove_all(menu);
+    }
+
+    if (actions != nullptr) {
+        auto old_actions = actions;
+        actions = g_simple_action_group_new();
+        if (indicator != nullptr) {
+            app_indicator_set_actions(indicator, actions);
+        }
+        g_object_unref(G_OBJECT(old_actions));
+    }
+
+    for (auto* submenu : owned_submenus) {
+        g_object_unref(G_OBJECT(submenu));
+    }
+    owned_submenus.clear();
+    indicator_actions.clear();
+    action_counter = 0;
+    current_station_menu_index = -1;
+    current_broadcast_menu_index = -1;
+#else
     if (menu) {
         for (auto& e : menu->get_children()) {
             menu->remove(*e);
@@ -279,6 +447,7 @@ RadioTrayLite::clear_menu()
 
     current_station_menu_entry = nullptr;
     current_broadcast_menu_entry = nullptr;
+#endif
 }
 
 bool
@@ -365,6 +534,25 @@ RadioTrayLite::set_current_station(bool turn_on)
             return Glib::ustring(ss.str());
         };
 
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+        auto label = mk_menu_entry(player->get_station(), turn_on);
+        if (current_station_menu_index < 0) {
+            auto detailed_action = add_indicator_action(IndicatorAction::Type::CurrentStation);
+            auto menu_item = g_menu_item_new(label.c_str(), detailed_action.c_str());
+            g_menu_insert_item(menu, 0, menu_item);
+            g_object_unref(menu_item);
+            current_station_menu_index = 0;
+            if (current_broadcast_menu_index >= 0) {
+                current_broadcast_menu_index++;
+            }
+        } else {
+            auto detailed_action = add_indicator_action(IndicatorAction::Type::CurrentStation);
+            auto menu_item = g_menu_item_new(label.c_str(), detailed_action.c_str());
+            g_menu_remove(menu, current_station_menu_index);
+            g_menu_insert_item(menu, current_station_menu_index, menu_item);
+            g_object_unref(menu_item);
+        }
+#else
         if (current_station_menu_entry == nullptr) {
             current_station_menu_entry = Gtk::manage(new Gtk::MenuItem(mk_menu_entry(player->get_station(), turn_on)));
             current_station_menu_entry->signal_activate().connect(sigc::mem_fun(*this, &RadioTrayLite::on_current_station_button));
@@ -372,9 +560,12 @@ RadioTrayLite::set_current_station(bool turn_on)
         } else {
             current_station_menu_entry->set_label(mk_menu_entry(player->get_station(), turn_on));
         }
+#endif
     }
 
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
     menu->show_all();
+#endif
 }
 
 void
@@ -401,6 +592,22 @@ RadioTrayLite::set_current_broadcast(const Glib::ustring& info)
         return result;
     };
 
+    auto label = split(info, 30);
+
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    auto menu_item = g_menu_item_new(label.c_str(), nullptr);
+    if (current_broadcast_menu_index < 0) {
+        g_menu_insert_item(menu, 0, menu_item);
+        current_broadcast_menu_index = 0;
+        if (current_station_menu_index >= 0) {
+            current_station_menu_index++;
+        }
+    } else {
+        g_menu_remove(menu, current_broadcast_menu_index);
+        g_menu_insert_item(menu, current_broadcast_menu_index, menu_item);
+    }
+    g_object_unref(menu_item);
+#else
     if (current_broadcast_menu_entry == nullptr) {
         current_broadcast_menu_entry = Gtk::manage(new Gtk::MenuItem(split(info, 30)));
         menu->prepend(*current_broadcast_menu_entry);
@@ -409,6 +616,7 @@ RadioTrayLite::set_current_broadcast(const Glib::ustring& info)
     }
 
     current_broadcast_menu_entry->set_sensitive(false);
+#endif
 }
 
 void
@@ -431,10 +639,18 @@ RadioTrayLite::on_station_changed_signal(const Glib::ustring& station, StationSt
     }
 
     if (state == StationState::PLAYING) {
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+        set_indicator_icon(kAppIndicatorIconOn);
+#else
         app_indicator_set_icon(indicator, kAppIndicatorIconOn);
+#endif
         set_current_broadcast(station);
     } else {
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+        set_indicator_icon(kAppIndicatorIconOff);
+#else
         app_indicator_set_icon(indicator, kAppIndicatorIconOff);
+#endif
     }
 }
 
