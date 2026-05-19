@@ -37,6 +37,33 @@ if [[ "${EUID}" -ne 0 ]]; then
     SUDO=(sudo)
 fi
 
+check_source_tree() {
+    local missing=0
+    local path
+
+    for path in \
+        CMakeLists.txt \
+        cmake/CPackConfig.cmake.in \
+        cmake/FindLibMagic.cmake \
+        cmake/FindLibNotify.cmake \
+        data/bookmarks.xml \
+        data/radiotray-lite.desktop \
+        src/CMakeLists.txt \
+        src/radiotray-lite.cpp
+    do
+        if [[ ! -e "${ROOT_DIR}/${path}" ]]; then
+            echo "Missing required source file: ${path}" >&2
+            missing=1
+        fi
+    done
+
+    if [[ "${missing}" -ne 0 ]]; then
+        echo >&2
+        echo "Run this script from a complete radiotray-lite source tree, not from a standalone build-deb.sh download." >&2
+        exit 2
+    fi
+}
+
 usage() {
     cat <<EOF
 Usage: ./build-deb.sh [options]
@@ -93,6 +120,8 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+check_source_tree
 
 if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
     apt_has_package() {

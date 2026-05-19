@@ -22,12 +22,45 @@ configures CMake, builds the binary, and creates a `.deb` package:
 ./build-deb.sh --clean
 ```
 
+Run the script from a complete source checkout or source archive. Downloading
+`build-deb.sh` alone is not enough because CMake also needs the top-level
+`CMakeLists.txt`, the `src/`, `cmake/`, and `data/` directories.
+
 Generated packages are written under `build-deb/packages/`.
 
 To install the generated package:
 
 ```sh
 sudo apt install ./build-deb/packages/*.deb
+```
+
+## Build AppImage In A Container
+
+To avoid installing build libraries on the host system, build the AppImage in a
+Debian container:
+
+```sh
+./build-appimage.sh --clean
+```
+
+The script uses `podman` when available, otherwise `docker`. The default image
+is `debian:12` so the generated AppImage is built on a conservative base for
+current Debian/Ubuntu systems. The output is written in the project root as an
+`.AppImage` file.
+
+## Uninstall
+
+To uninstall the Debian package and remove only libraries that are no longer
+needed by any other installed package:
+
+```sh
+./uninstall-radiotray-lite.sh
+```
+
+To also remove the user configuration directory:
+
+```sh
+./uninstall-radiotray-lite.sh --purge-config
 ```
 
 ## Manual Dependencies

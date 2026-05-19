@@ -6,3 +6,8 @@ tags
 .vscode/
 build/
 build-deb/
+build-appimage/
+build-deb-debian12/
+AppDir/
+AppDir.7z
+*.AppImage
