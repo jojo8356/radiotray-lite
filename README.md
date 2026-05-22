@@ -74,6 +74,7 @@ sudo apt install -y \
   build-essential cmake pkg-config git \
   file \
   libgtkmm-3.0-dev \
+  libxml2-dev \
   libmagic-dev \
   libcurl4-openssl-dev \
   libnotify-dev \

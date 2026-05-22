@@ -174,6 +174,7 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
         build-essential cmake pkg-config git \
         file \
         libgtkmm-3.0-dev \
+        libxml2-dev \
         gstreamer1.0-plugins-base \
         gstreamer1.0-plugins-good \
         libcurl4-openssl-dev \

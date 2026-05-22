@@ -97,6 +97,7 @@ apt-get install -y \
     bash build-essential cmake pkg-config git ca-certificates wget file \
     desktop-file-utils patchelf \
     libgtkmm-3.0-dev \
+    libxml2-dev \
     libmagic-dev \
     libcurl4-openssl-dev \
     libnotify-dev \
