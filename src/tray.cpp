@@ -1,7 +1,54 @@
+#include <cstring>
+
 #include "tray.hpp"
 
 namespace radiotray
 {
+namespace
+{
+
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+void
+appindicator_gtk3_log_handler(const gchar* log_domain,
+                              GLogLevelFlags log_level,
+                              const gchar* message,
+                              gpointer user_data)
+{
+    static const char* const kGtk3AppIndicatorTypeWarning =
+        "g_type_add_interface_static: assertion 'G_TYPE_IS_INSTANTIATABLE (instance_type)' failed";
+
+    if ((log_level & G_LOG_LEVEL_CRITICAL) != 0 && message != nullptr &&
+        std::strstr(message, kGtk3AppIndicatorTypeWarning) != nullptr) {
+        return;
+    }
+
+    g_log_default_handler(log_domain, log_level, message, user_data);
+}
+
+class ScopedAppIndicatorGtk3LogHandler
+{
+public:
+    ScopedAppIndicatorGtk3LogHandler()
+        : handler_id(g_log_set_handler("GLib-GObject",
+                                       GLogLevelFlags(G_LOG_LEVEL_CRITICAL | G_LOG_FLAG_FATAL | G_LOG_FLAG_RECURSION),
+                                       appindicator_gtk3_log_handler,
+                                       nullptr))
+    {
+    }
+
+    ~ScopedAppIndicatorGtk3LogHandler()
+    {
+        if (handler_id != 0) {
+            g_log_remove_handler("GLib-GObject", handler_id);
+        }
+    }
+
+private:
+    guint handler_id = 0;
+};
+#endif
+
+} // namespace
 
 RadioTrayLite::BookmarksWalker::BookmarksWalker(RadioTrayLite& radiotray,
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
@@ -161,16 +208,20 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
 
     player->em = em;
 
-    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
-
-    app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
+    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
+    app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
     app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn, kAppName);
     app_indicator_set_menu(indicator, menu);
     app_indicator_set_actions(indicator, actions);
 #else
-    app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn);
-    app_indicator_set_menu(indicator, menu->gobj());
+    {
+        ScopedAppIndicatorGtk3LogHandler appindicator_log_handler;
+        indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
+        app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
+        app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn);
+        app_indicator_set_menu(indicator, menu->gobj());
+    }
 #endif
 
     initialized = true;
