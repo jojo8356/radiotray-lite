@@ -14,6 +14,7 @@
 #include <gtkmm.h>
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
 #include <ayatana-appindicator.h>
+#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
 #elif defined(APPINDICATOR_USE_AYATANA)
 #include <libayatana-appindicator/app-indicator.h>
 #else
@@ -58,9 +59,17 @@ private:
 
     Gtk::MenuItem* current_station_menu_entry = nullptr;
     Gtk::MenuItem* current_broadcast_menu_entry = nullptr;
+#ifdef APPINDICATOR_USE_GTK_STATUS_ICON
+    Glib::RefPtr<Gtk::StatusIcon> status_icon;
+#else
+    guint glib_gobject_log_handler_id = 0;
+    guint gdk_log_handler_id = 0;
+#endif
 #endif
 
+#ifndef APPINDICATOR_USE_GTK_STATUS_ICON
     AppIndicator* indicator = nullptr;
+#endif
 
     std::string bookmarks_file;
     pugi::xml_document bookmarks_doc;
@@ -125,6 +134,10 @@ private:
     void on_station_button(const Glib::ustring& group_name, const Glib::ustring& station_name, const Glib::ustring& station_url);
     void on_reload_button();
     void on_current_station_button();
+#ifdef APPINDICATOR_USE_GTK_STATUS_ICON
+    void on_status_icon_activate();
+    void on_status_icon_popup_menu(guint button, guint activate_time);
+#endif
 
     bool resume(bool resume_last_station);
 
@@ -138,6 +151,11 @@ private:
 
     void on_station_changed_signal(const Glib::ustring& station, StationState state);
     void on_broadcast_info_changed_signal(const Glib::ustring& station, const Glib::ustring& info);
+
+#if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+    void install_legacy_appindicator_log_handlers();
+    void remove_legacy_appindicator_log_handlers();
+#endif
 
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
     static void on_indicator_action(GSimpleAction* action, GVariant* parameter, gpointer user_data);

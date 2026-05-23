@@ -53,10 +53,14 @@ APPINDICATOR_BACKEND=auto
 Accepted values:
 
 - `auto`: prefer `ayatana-appindicator-glib`, then `appindicator3-0.1`, then
-  `ayatana-appindicator3-0.1`
+  `ayatana-appindicator3-0.1`, and finally the GTK status icon fallback if no
+  AppIndicator development package is available
 - `ayatana-glib`: require `ayatana-appindicator-glib`
 - `appindicator`: require `appindicator3-0.1`
 - `ayatana-gtk3`: require `ayatana-appindicator3-0.1`
+- `gtk-status-icon`: use GTK 3's deprecated `GtkStatusIcon` implementation
+  instead of AppIndicator. This has the broadest old-desktop compatibility on
+  X11, but may not appear on desktops that removed classic tray support.
 
 `./build-deb.sh` validates this value before installing dependencies, and
 CMake validates it again before selecting the pkg-config module. A manually

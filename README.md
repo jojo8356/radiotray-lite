@@ -129,6 +129,9 @@ Available values:
 - `ayatana-glib`: require `libayatana-appindicator-glib-dev`.
 - `appindicator`: require `libappindicator3-dev`.
 - `ayatana-gtk3`: require `libayatana-appindicator3-dev`.
+- `gtk-status-icon`: use GTK 3's deprecated `GtkStatusIcon` fallback without
+  AppIndicator. This is useful on older X11 desktops where legacy AppIndicator
+  libraries emit runtime warnings.
 
 The `ayatana-glib` backend is preferred on recent systems because it avoids the
 runtime deprecation warning emitted by the older GTK 3 Ayatana library.
@@ -137,6 +140,13 @@ You can override the config for one build:
 
 ```sh
 ./build-deb.sh --clean --appindicator-backend ayatana-glib
+```
+
+For Debian Bookworm/MATE systems that only provide `libayatana-appindicator3`,
+the compatibility fallback avoids that library entirely:
+
+```sh
+./build-deb.sh --clean --appindicator-backend gtk-status-icon
 ```
 
 Both `build-deb.sh` and CMake validate the selected backend and fail clearly if

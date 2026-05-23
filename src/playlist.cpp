@@ -174,18 +174,36 @@ Playlist::run_playlist_decoders(const std::string& url)
         }
     }
 
-    // Try to infer playlist's type
-    abort_get_request = true;
-    prepare_playlist_request(url, not kOnlyHeaders);
-    auto rc = curl_easy_perform(handle);
-    abort_get_request = false;
-
-    if (rc == CURLE_OK or rc == CURLE_WRITE_ERROR /* it's ok, we've aborted reading */) {
-        auto type = guess_playlist_decoder_type();
-        if (type != PlaylistDecoderType::UNKNOWN_PLAYLIST_DECODER) {
-            const auto& decoder = decoders[type];
+    auto type_from_url = guess_playlist_decoder_type_from_url(url);
+    if (type_from_url != PlaylistDecoderType::UNKNOWN_PLAYLIST_DECODER) {
+        const auto& decoder = decoders[type_from_url];
+        prepare_playlist_request(url, not kOnlyHeaders);
+        auto rc = curl_easy_perform(handle);
+        if (rc == CURLE_OK) {
+            LOG(DEBUG) << "Matched " << decoder->desc() << " by URL extension";
+            LOG(DEBUG) << "Playlist: " << data;
             streams = decoder->extract_media_streams(data);
+            for (auto& s : streams) {
+                LOG(DEBUG) << "Stream: " << s;
+            }
             extracted = true;
+        }
+    }
+
+    // Try to infer playlist's type
+    if (streams.empty()) {
+        abort_get_request = true;
+        prepare_playlist_request(url, not kOnlyHeaders);
+        auto rc = curl_easy_perform(handle);
+        abort_get_request = false;
+
+        if (rc == CURLE_OK or rc == CURLE_WRITE_ERROR /* it's ok, we've aborted reading */) {
+            auto type = guess_playlist_decoder_type();
+            if (type != PlaylistDecoderType::UNKNOWN_PLAYLIST_DECODER) {
+                const auto& decoder = decoders[type];
+                streams = decoder->extract_media_streams(data);
+                extracted = true;
+            }
         }
     }
 
@@ -205,6 +223,40 @@ Playlist::has_prefix(const std::string& prefix, const std::string& str)
     }
 
     return (strncasecmp(str.c_str(), prefix.c_str(), prefix.size()) == 0);
+}
+
+PlaylistDecoderType
+Playlist::guess_playlist_decoder_type_from_url(const std::string& url)
+{
+    auto path_end = url.find_first_of("?#");
+    auto path = url.substr(0, path_end);
+    std::transform(path.begin(), path.end(), path.begin(), tolower);
+
+    if (path.size() >= 4 && path.compare(path.size() - 4, 4, ".m3u") == 0) {
+        return PlaylistDecoderType::M3U_PLAYLIST_DECODER;
+    }
+
+    if (path.size() >= 5 && path.compare(path.size() - 5, 5, ".m3u8") == 0) {
+        return PlaylistDecoderType::M3U_PLAYLIST_DECODER;
+    }
+
+    if (path.size() >= 4 && path.compare(path.size() - 4, 4, ".pls") == 0) {
+        return PlaylistDecoderType::PLS_PLAYLIST_DECODER;
+    }
+
+    if (path.size() >= 4 && path.compare(path.size() - 4, 4, ".asx") == 0) {
+        return PlaylistDecoderType::ASX_PLAYLIST_DECODER;
+    }
+
+    if (path.size() >= 4 && path.compare(path.size() - 4, 4, ".ram") == 0) {
+        return PlaylistDecoderType::RAM_PLAYLIST_DECODER;
+    }
+
+    if (path.size() >= 5 && path.compare(path.size() - 5, 5, ".xspf") == 0) {
+        return PlaylistDecoderType::XSPF_PLAYLIST_DECODER;
+    }
+
+    return PlaylistDecoderType::UNKNOWN_PLAYLIST_DECODER;
 }
 
 PlaylistDecoderType

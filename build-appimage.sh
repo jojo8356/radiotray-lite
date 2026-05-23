@@ -25,7 +25,7 @@ Options:
 Environment:
   CONTAINER_ENGINE    podman or docker (auto-detected by default)
   APPINDICATOR_BACKEND
-                      auto, ayatana-glib, appindicator, ayatana-gtk3
+                      auto, ayatana-glib, appindicator, ayatana-gtk3, gtk-status-icon
 EOF
 }
 
@@ -119,6 +119,8 @@ case "${APPINDICATOR_BACKEND}" in
         ;;
     appindicator)
         apt-get install -y libappindicator3-dev
+        ;;
+    gtk-status-icon)
         ;;
     *)
         echo "Invalid APPINDICATOR_BACKEND: ${APPINDICATOR_BACKEND}" >&2

@@ -7,7 +7,7 @@ namespace radiotray
 namespace
 {
 
-#ifndef APPINDICATOR_USE_AYATANA_GLIB
+#if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
 void
 appindicator_gtk3_log_handler(const gchar* log_domain,
                               GLogLevelFlags log_level,
@@ -16,36 +16,18 @@ appindicator_gtk3_log_handler(const gchar* log_domain,
 {
     static const char* const kGtk3AppIndicatorTypeWarning =
         "g_type_add_interface_static: assertion 'G_TYPE_IS_INSTANTIATABLE (instance_type)' failed";
+    static const char* const kGdkToplevelUpdatesWarning =
+        "gdk_window_thaw_toplevel_updates: assertion 'window->update_and_descendants_freeze_count > 0' failed";
 
     if ((log_level & G_LOG_LEVEL_CRITICAL) != 0 && message != nullptr &&
-        std::strstr(message, kGtk3AppIndicatorTypeWarning) != nullptr) {
+        (std::strstr(message, kGtk3AppIndicatorTypeWarning) != nullptr ||
+         std::strstr(message, kGdkToplevelUpdatesWarning) != nullptr)) {
         return;
     }
 
     g_log_default_handler(log_domain, log_level, message, user_data);
 }
 
-class ScopedAppIndicatorGtk3LogHandler
-{
-public:
-    ScopedAppIndicatorGtk3LogHandler()
-        : handler_id(g_log_set_handler("GLib-GObject",
-                                       GLogLevelFlags(G_LOG_LEVEL_CRITICAL | G_LOG_FLAG_FATAL | G_LOG_FLAG_RECURSION),
-                                       appindicator_gtk3_log_handler,
-                                       nullptr))
-    {
-    }
-
-    ~ScopedAppIndicatorGtk3LogHandler()
-    {
-        if (handler_id != 0) {
-            g_log_remove_handler("GLib-GObject", handler_id);
-        }
-    }
-
-private:
-    guint handler_id = 0;
-};
 #endif
 
 } // namespace
@@ -160,9 +142,15 @@ RadioTrayLite::~RadioTrayLite()
     }
 #endif
 
+#ifndef APPINDICATOR_USE_GTK_STATUS_ICON
     if (indicator != nullptr) {
         g_object_unref(G_OBJECT(indicator));
     }
+#endif
+
+#if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+    remove_legacy_appindicator_log_handlers();
+#endif
 }
 
 bool
@@ -214,14 +202,18 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
     app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn, kAppName);
     app_indicator_set_menu(indicator, menu);
     app_indicator_set_actions(indicator, actions);
+#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+    status_icon = Gtk::StatusIcon::create(kAppIndicatorIconOff);
+    status_icon->set_tooltip_text(kAppName);
+    status_icon->set_visible(true);
+    status_icon->signal_activate().connect(sigc::mem_fun(*this, &RadioTrayLite::on_status_icon_activate));
+    status_icon->signal_popup_menu().connect(sigc::mem_fun(*this, &RadioTrayLite::on_status_icon_popup_menu));
 #else
-    {
-        ScopedAppIndicatorGtk3LogHandler appindicator_log_handler;
-        indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
-        app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
-        app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn);
-        app_indicator_set_menu(indicator, menu->gobj());
-    }
+    install_legacy_appindicator_log_handlers();
+    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
+    app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
+    app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn);
+    app_indicator_set_menu(indicator, menu->gobj());
 #endif
 
     initialized = true;
@@ -296,6 +288,22 @@ RadioTrayLite::on_current_station_button()
         player->play();
     }
 }
+
+#ifdef APPINDICATOR_USE_GTK_STATUS_ICON
+void
+RadioTrayLite::on_status_icon_activate()
+{
+    on_current_station_button();
+}
+
+void
+RadioTrayLite::on_status_icon_popup_menu(guint button, guint activate_time)
+{
+    if (menu) {
+        menu->popup(button, activate_time);
+    }
+}
+#endif
 
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
 void
@@ -692,6 +700,8 @@ RadioTrayLite::on_station_changed_signal(const Glib::ustring& station, StationSt
     if (state == StationState::PLAYING) {
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
         set_indicator_icon(kAppIndicatorIconOn);
+#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+        status_icon->set(kAppIndicatorIconOn);
 #else
         app_indicator_set_icon(indicator, kAppIndicatorIconOn);
 #endif
@@ -699,6 +709,8 @@ RadioTrayLite::on_station_changed_signal(const Glib::ustring& station, StationSt
     } else {
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
         set_indicator_icon(kAppIndicatorIconOff);
+#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+        status_icon->set(kAppIndicatorIconOff);
 #else
         app_indicator_set_icon(indicator, kAppIndicatorIconOff);
 #endif
@@ -712,6 +724,36 @@ RadioTrayLite::on_broadcast_info_changed_signal(const Glib::ustring& /*station*/
 
     LOG(DEBUG) << info;
 }
+
+#if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+void
+RadioTrayLite::install_legacy_appindicator_log_handlers()
+{
+    auto flags = GLogLevelFlags(G_LOG_LEVEL_CRITICAL | G_LOG_FLAG_FATAL | G_LOG_FLAG_RECURSION);
+
+    if (glib_gobject_log_handler_id == 0) {
+        glib_gobject_log_handler_id = g_log_set_handler("GLib-GObject", flags, appindicator_gtk3_log_handler, nullptr);
+    }
+
+    if (gdk_log_handler_id == 0) {
+        gdk_log_handler_id = g_log_set_handler("Gdk", flags, appindicator_gtk3_log_handler, nullptr);
+    }
+}
+
+void
+RadioTrayLite::remove_legacy_appindicator_log_handlers()
+{
+    if (glib_gobject_log_handler_id != 0) {
+        g_log_remove_handler("GLib-GObject", glib_gobject_log_handler_id);
+        glib_gobject_log_handler_id = 0;
+    }
+
+    if (gdk_log_handler_id != 0) {
+        g_log_remove_handler("Gdk", gdk_log_handler_id);
+        gdk_log_handler_id = 0;
+    }
+}
+#endif
 
 void
 RadioTrayLite::copy_default_bookmarks(const std::string& src_file)

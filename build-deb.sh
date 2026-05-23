@@ -21,11 +21,11 @@ APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND,,}"
 
 validate_appindicator_backend() {
     case "$1" in
-        auto|ayatana-glib|appindicator|ayatana-gtk3)
+        auto|ayatana-glib|appindicator|ayatana-gtk3|gtk-status-icon)
             ;;
         *)
             echo "Invalid APPINDICATOR_BACKEND: $1" >&2
-            echo "Expected one of: auto, ayatana-glib, appindicator, ayatana-gtk3" >&2
+            echo "Expected one of: auto, ayatana-glib, appindicator, ayatana-gtk3, gtk-status-icon" >&2
             exit 2
             ;;
     esac
@@ -73,7 +73,7 @@ Options:
   --clean             Remove the build directory before configuring
   --debug             Build with CMAKE_BUILD_TYPE=Debug
   --appindicator-backend BACKEND
-                      Select backend: auto, ayatana-glib, appindicator, ayatana-gtk3
+                      Select backend: auto, ayatana-glib, appindicator, ayatana-gtk3, gtk-status-icon
                       Defaults to APPINDICATOR_BACKEND in build-options.conf
   --with-gstreamer-bad
                       Install and require gstreamer1.0-plugins-bad
@@ -157,9 +157,16 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
             ayatana-gtk3)
                 package="libayatana-appindicator3-dev"
                 ;;
+            gtk-status-icon)
+                package=""
+                ;;
         esac
 
         if [[ "${APPINDICATOR_BACKEND}" != "auto" ]]; then
+            if [[ -z "${package}" ]]; then
+                return 0
+            fi
+
             if ! apt_has_package "${package}"; then
                 echo "Selected AppIndicator backend '${APPINDICATOR_BACKEND}' requires unavailable package: ${package}" >&2
                 exit 2
@@ -186,8 +193,12 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
     fi
 
     "${SUDO[@]}" apt-get install -y \
-        "$(first_available_package libgstreamermm-1.0-dev libgstreamermm-0.10-dev)" \
-        "$(appindicator_dev_package)"
+        "$(first_available_package libgstreamermm-1.0-dev libgstreamermm-0.10-dev)"
+
+    appindicator_package="$(appindicator_dev_package)"
+    if [[ -n "${appindicator_package}" ]]; then
+        "${SUDO[@]}" apt-get install -y "${appindicator_package}"
+    fi
 fi
 
 if [[ "${CLEAN}" -eq 1 ]]; then
