@@ -983,8 +983,12 @@ RadioTrayLite::bookmark_icon_file(const pugi::xml_node& node)
 
     auto file = icon_cache.resolve(icon, icon_path, bookmarks_dir());
 
+    // INFO level on purpose: DEBUG logs are compiled out in Release builds and
+    // this is the quickest way to see which icon ended up on a menu entry.
     if (not file.empty()) {
-        LOG(DEBUG) << "Icon for '" << node.attribute("name").as_string() << "': " << file;
+        LOG(INFO) << "Icon for '" << node.attribute("name").as_string() << "': " << file;
+    } else {
+        LOG(WARNING) << "No usable icon for '" << node.attribute("name").as_string() << "'";
     }
 
     return file;
