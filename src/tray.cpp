@@ -314,6 +314,12 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
     std::string images_dir = app_image_dir();
     auto indicator_images_dir = images_dir.empty() ? kImagePath : images_dir.c_str();
 
+#ifdef APPINDICATOR_USE_GTK_STATUS_ICON
+    // GtkStatusIcon has no icon theme path: the directory is resolved per icon
+    // in resolve_tray_icon() instead.
+    (void)indicator_images_dir;
+#endif
+
 #ifndef APPINDICATOR_USE_AYATANA_GLIB
     install_backend_log_filter();
 #endif

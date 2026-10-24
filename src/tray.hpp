@@ -66,6 +66,11 @@ private:
 #else
     guint glib_gobject_log_handler_id = 0;
     guint gdk_log_handler_id = 0;
+#endif
+
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+    // Domain/identifier pairs of the installed log filters (see
+    // install_backend_log_filter). Declared for every non ayatana-glib backend.
     std::vector<std::pair<std::string, guint>> backend_log_handlers;
 #endif
 #endif
