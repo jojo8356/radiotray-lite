@@ -212,6 +212,38 @@ ERROR To list the installed plugins: gst-inspect-1.0 | grep -i aac
 
 The playback then skips to the next stream of the playlist.
 
+Check what is installed and test a stream outside the application
+(`gst-inspect-1.0` and `gst-launch-1.0` come from `gstreamer1.0-tools`;
+`gst-play-1.0` is not shipped by every distribution):
+
+```sh
+gst-inspect-1.0 | grep -Ei 'aacparse|faad|avdec_aac|avdec_mp3'
+gst-launch-1.0 playbin uri="https://www.radioparadise.com/m3u/aac-320.m3u"
+```
+
+### Third-party repositories and the i386 warnings
+
+Some external repositories (nodesource, docker, ...) do not provide i386
+packages. apt then prints, on every `apt update`:
+
+```
+N: Le fichier configuré « main/binary-i386/Packages » ne sera pas pris en compte
+```
+
+Restrict those entries to amd64 to silence it:
+
+```sh
+# /etc/apt/sources.list.d/nodesource.list
+deb [arch=amd64 signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main
+
+# /etc/apt/sources.list.d/docker.sources (deb822)
+Architectures: amd64
+```
+
+Duplicate suites between `/etc/apt/sources.list` and
+`/etc/apt/sources.list.d/debian.sources` produce
+"target Packages is specified multiple times": keep only one of the two files.
+
 The generated packages require `gstreamer1.0-plugins-base` and
 `gstreamer1.0-plugins-good` by default. `gstreamer1.0-plugins-bad` is optional
 because it can be unavailable or temporarily uninstallable on some
