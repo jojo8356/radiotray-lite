@@ -6,7 +6,25 @@ CONTAINER_ENGINE="${CONTAINER_ENGINE:-}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-debian:12}"
 BUILD_DIR="${BUILD_DIR:-${ROOT_DIR}/build-appimage}"
 APPDIR="${APPDIR:-${ROOT_DIR}/AppDir}"
-APPIMAGE_NAME="${APPIMAGE_NAME:-Radio_Tray_Lite-0.2.19-x86_64.AppImage}"
+
+# Version comes from CMakeLists.txt unless it is given in the environment.
+detect_version() {
+    local major minor patch
+    major="$(sed -n 's/^set(TARGET_VERSION_MAJOR[[:space:]]*\([0-9][0-9]*\)).*/\1/p' "${ROOT_DIR}/CMakeLists.txt" | head -n1)"
+    minor="$(sed -n 's/^set(TARGET_VERSION_MINOR[[:space:]]*\([0-9][0-9]*\)).*/\1/p' "${ROOT_DIR}/CMakeLists.txt" | head -n1)"
+    patch="$(sed -n 's/^set(TARGET_VERSION_PATCH[[:space:]]*\([0-9][0-9]*\)).*/\1/p' "${ROOT_DIR}/CMakeLists.txt" | head -n1)"
+
+    if [[ -z "${major}" || -z "${minor}" || -z "${patch}" ]]; then
+        echo "unknown"
+        return 0
+    fi
+
+    printf '%s.%s.%s\n' "${major}" "${minor}" "${patch}"
+}
+
+APP_VERSION="${APP_VERSION:-$(detect_version)}"
+APPIMAGE_NAME="${APPIMAGE_NAME:-Radio_Tray_Lite-${APP_VERSION}-x86_64.AppImage}"
+MIN_SIZE=0
 APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND:-auto}"
 LINUXDEPLOY_URL="${LINUXDEPLOY_URL:-https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage}"
 
@@ -20,6 +38,8 @@ polluted with build dependencies.
 Options:
   --clean             Remove build-appimage/, AppDir/, and the output AppImage first
   --image IMAGE       Container image to use (default: ${CONTAINER_IMAGE})
+  --min-size          Optimize for the smallest binary: -Os, LTO,
+                      gc-sections, strip
   -h, --help          Show this help
 
 Environment:
@@ -44,6 +64,10 @@ while [[ $# -gt 0 ]]; do
             fi
             CONTAINER_IMAGE="$2"
             shift 2
+            ;;
+        --min-size)
+            MIN_SIZE=1
+            shift
             ;;
         -h|--help)
             usage
@@ -87,6 +111,8 @@ fi
     -w /src \
     -e BUILD_DIR="/src/$(basename "${BUILD_DIR}")" \
     -e APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND}" \
+    -e APP_VERSION="${APP_VERSION}" \
+    -e MIN_SIZE="${MIN_SIZE}" \
     -e LINUXDEPLOY_URL="${LINUXDEPLOY_URL}" \
     "${CONTAINER_IMAGE}" \
     bash -lc '
@@ -128,18 +154,19 @@ case "${APPINDICATOR_BACKEND}" in
         ;;
 esac
 
-rm -rf "${BUILD_DIR}" /src/AppDir /src/Radio_Tray_Lite-0.2.19-x86_64.AppImage
+rm -rf "${BUILD_DIR}" /src/AppDir "/src/Radio_Tray_Lite-${APP_VERSION}-x86_64.AppImage"
 cmake -S /src -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DRADIOTRAY_APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND}"
+    -DRADIOTRAY_APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND}" \
+    -DRADIOTRAY_MIN_SIZE="${MIN_SIZE}"
 cmake --build "${BUILD_DIR}" -j"$(nproc)"
 
 mkdir -p /tmp/linuxdeploy
 wget -O /tmp/linuxdeploy/linuxdeploy-x86_64.AppImage "${LINUXDEPLOY_URL}"
 chmod +x /tmp/linuxdeploy/linuxdeploy-x86_64.AppImage
 
-LINUXDEPLOY_OUTPUT_VERSION=0.2.19 \
+LINUXDEPLOY_OUTPUT_VERSION="${APP_VERSION}" \
 ARCH=x86_64 \
 APPIMAGE_EXTRACT_AND_RUN=1 \
 /tmp/linuxdeploy/linuxdeploy-x86_64.AppImage \
@@ -152,4 +179,4 @@ APPIMAGE_EXTRACT_AND_RUN=1 \
 
 echo
 echo "AppImage:"
-find "${ROOT_DIR}" -maxdepth 1 -type f -name "*.AppImage" -print
+find "${ROOT_DIR}" -maxdepth 1 -type f -name "*.AppImage" -exec ls -lh {} + | awk '{print $5, $9}'

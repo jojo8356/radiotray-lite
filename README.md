@@ -154,6 +154,27 @@ the value is invalid or if the requested development package is unavailable.
 
 ## Build Options
 
+To get the smallest possible binary and package (`-Os`, LTO, `--gc-sections`,
+stripped binary, `.deb` recompressed with `xz -9`):
+
+```sh
+./build-deb.sh --clean --min-size
+./build-appimage.sh --clean --min-size
+```
+
+For the smallest dependency set, build inside the container of the target
+distribution and/or drop the AppIndicator dependency:
+
+```sh
+docker run --rm -v "$PWD:/src" -w /src debian:12 \
+  bash -lc './build-deb.sh --clean --min-size'
+./build-deb.sh --clean --min-size --appindicator-backend gtk-status-icon
+```
+
+See [RELEASING.md](RELEASING.md) for the complete clone → build → release
+sequence (three `.deb` for Ubuntu 22.04/24.04 and Debian 12, one AppImage,
+checksums, and `gh release create`).
+
 The generated packages require `gstreamer1.0-plugins-base` and
 `gstreamer1.0-plugins-good` by default. `gstreamer1.0-plugins-bad` is optional
 because it can be unavailable or temporarily uninstallable on some

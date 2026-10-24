@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    name: DEB (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: ubuntu-22.04
+            container: ubuntu:22.04
+          - distro: ubuntu-24.04
+            container: ubuntu:24.04
+          - distro: debian-12
+            container: debian:12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build minimal Debian package
+        run: ./build-deb.sh --clean --min-size
+
+      - name: Collect package
+        env:
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          mkdir -p dist
+          for f in build-deb/packages/*.deb; do
+            cp "$f" "dist/$(basename "${f%.deb}")-${DISTRO}.deb"
+          done
+          ls -lh dist/
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.distro }}
+          path: dist/*.deb
+          if-no-files-found: error
+
+  appimage:
+    name: AppImage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build AppImage
+        run: ./build-appimage.sh --clean --min-size
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: '*.AppImage'
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [deb, appimage]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Radio Tray Lite ${TAG#v}" \
+            --generate-notes

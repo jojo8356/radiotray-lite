@@ -8,6 +8,7 @@ BUILD_TYPE="Release"
 INSTALL_DEPS=1
 CLEAN=0
 WITH_GSTREAMER_BAD=0
+MIN_SIZE=0
 APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND:-auto}"
 CONFIG_FILE="${ROOT_DIR}/build-options.conf"
 SUDO=()
@@ -77,6 +78,8 @@ Options:
                       Defaults to APPINDICATOR_BACKEND in build-options.conf
   --with-gstreamer-bad
                       Install and require gstreamer1.0-plugins-bad
+  --min-size          Optimize for the smallest binary: -Os, LTO, gc-sections,
+                      strip, and the .deb is recompressed with xz -9
   -h, --help          Show this help
 EOF
 }
@@ -97,6 +100,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --with-gstreamer-bad)
             WITH_GSTREAMER_BAD=1
+            shift
+            ;;
+        --min-size)
+            MIN_SIZE=1
             shift
             ;;
         --appindicator-backend)
@@ -209,15 +216,46 @@ cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}" \
     -DRADIOTRAY_APPINDICATOR_BACKEND="${APPINDICATOR_BACKEND}" \
-    -DRADIOTRAY_REQUIRE_GSTREAMER_BAD="${WITH_GSTREAMER_BAD}"
+    -DRADIOTRAY_REQUIRE_GSTREAMER_BAD="${WITH_GSTREAMER_BAD}" \
+    -DRADIOTRAY_MIN_SIZE="${MIN_SIZE}"
 
 cmake --build "${BUILD_DIR}" -j"$(nproc)"
+
+if [[ "${MIN_SIZE}" -eq 1 ]]; then
+    # cmake already links with -s, but a few objects may still carry symbols.
+    if command -v strip >/dev/null 2>&1; then
+        strip --strip-unneeded "${BUILD_DIR}/src/radiotray-lite" 2>/dev/null || true
+    fi
+fi
 
 (
     cd "${BUILD_DIR}"
     cpack -G DEB
 )
 
+if [[ "${MIN_SIZE}" -eq 1 ]] && command -v dpkg-deb >/dev/null 2>&1; then
+    # CPack uses the default xz level; recompress at the maximum for a smaller
+    # package. Best effort: keep the CPack output if anything goes wrong.
+    for deb in "${BUILD_DIR}"/packages/*.deb; do
+        [[ -e "${deb}" ]] || continue
+
+        tmp_dir="$(mktemp -d)"
+        if dpkg-deb -R "${deb}" "${tmp_dir}" >/dev/null 2>&1 &&
+            dpkg-deb --root-owner-group -Zxz -z9 -b "${tmp_dir}" "${deb}.xz9" >/dev/null 2>&1; then
+            if [[ "$(stat -c %s "${deb}.xz9")" -lt "$(stat -c %s "${deb}")" ]]; then
+                mv -f "${deb}.xz9" "${deb}"
+                echo "Recompressed $(basename "${deb}") with xz -9"
+            else
+                rm -f "${deb}.xz9"
+            fi
+        else
+            rm -f "${deb}.xz9"
+            echo "Warning: couldn't recompress $(basename "${deb}"), keeping the CPack output" >&2
+        fi
+        rm -rf "${tmp_dir}"
+    done
+fi
+
 echo
 echo "Debian package(s):"
-find "${BUILD_DIR}/packages" -maxdepth 1 -type f -name "*.deb" -print
+find "${BUILD_DIR}/packages" -maxdepth 1 -type f -name "*.deb" -exec ls -lh {} + | awk '{print $5, $9}'

@@ -26,6 +26,7 @@ endif()
 message(STATUS "CMAKE_BUILD_TYPE: " ${CMAKE_BUILD_TYPE})
 
 option(RADIOTRAY_REQUIRE_GSTREAMER_BAD "Require gstreamer1.0-plugins-bad in generated packages" OFF)
+option(RADIOTRAY_MIN_SIZE "Optimize for the smallest binary (size, LTO, gc-sections, strip)" OFF)
 set(RADIOTRAY_APPINDICATOR_BACKEND "auto" CACHE STRING "AppIndicator backend: auto, ayatana-glib, appindicator, ayatana-gtk3, gtk-status-icon")
 set_property(CACHE RADIOTRAY_APPINDICATOR_BACKEND PROPERTY STRINGS auto ayatana-glib appindicator ayatana-gtk3 gtk-status-icon)
 string(TOLOWER "${RADIOTRAY_APPINDICATOR_BACKEND}" RADIOTRAY_APPINDICATOR_BACKEND_NORMALIZED)
@@ -41,6 +42,18 @@ message(STATUS "RADIOTRAY_APPINDICATOR_BACKEND: ${RADIOTRAY_APPINDICATOR_BACKEND
 
 add_compile_options(-Wall)
 add_compile_options(-Wextra)
+
+if (RADIOTRAY_MIN_SIZE)
+    message(STATUS "RADIOTRAY_MIN_SIZE: on (-Os, LTO, gc-sections, strip)")
+    # Target options are expanded after CMAKE_CXX_FLAGS_RELEASE (-O3), so -Os wins.
+    add_compile_options(
+        -Os
+        -flto
+        -ffunction-sections
+        -fdata-sections
+    )
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s -flto -Wl,--gc-sections -Wl,--as-needed")
+endif()
 
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -DELPP_NO_DEFAULT_LOG_FILE")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DELPP_NO_DEFAULT_LOG_FILE")
