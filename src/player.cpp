@@ -1,5 +1,7 @@
 #include "player.hpp"
 
+#include "gst_diagnostics.hpp"
+
 namespace radiotray
 {
 
@@ -126,18 +128,42 @@ Player::on_bus_message(const Glib::RefPtr<Gst::Bus>& /*bus*/, const Glib::RefPtr
             e.append(": ").append(err.what());
 
             // "A plugin is missing in your GStreamer installation" is the most
-            // common failure (AAC/MP3/Opus streams); tell which packages to
-            // install instead of leaving the user with a cryptic message.
+            // common failure (AAC/MP3/Opus streams); tell which element is
+            // missing and which package provides it instead of leaving the user
+            // with a generic, localized message.
             if (err.matches(gst_core_error_quark(), GST_CORE_ERROR_MISSING_PLUGIN)) {
-                LOG(ERROR) << "GStreamer plugin missing for this stream. Install the codecs, for example: "
-                           << "sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good "
-                           << "gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav";
-
 #if GSTREAMERMM_MAJOR_VERSION == 1 and GSTREAMERMM_MINOR_VERSION >= 8
                 auto debug = error_msg->parse_debug();
                 if (not debug.empty()) {
                     LOG(ERROR) << "GStreamer detail: " << debug;
                 }
+
+                auto element = extract_missing_element(debug);
+                auto deb_package = debian_package_for_element(element);
+                auto rpm_package = fedora_package_for_element(element);
+
+                if (not element.empty()) {
+                    LOG(ERROR) << "Missing GStreamer element: " << element;
+                }
+
+                if (not deb_package.empty()) {
+                    LOG(ERROR) << "Debian/Ubuntu: sudo apt install " << deb_package;
+                }
+
+                if (not rpm_package.empty()) {
+                    LOG(ERROR) << "Fedora: sudo dnf install " << rpm_package;
+                }
+
+                if (element.empty() or deb_package.empty()) {
+                    LOG(ERROR) << "A complete codec set is: gstreamer1.0-plugins-base gstreamer1.0-plugins-good "
+                               << "gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav";
+                }
+
+                LOG(ERROR) << "To list the installed plugins: gst-inspect-1.0 | grep -i aac";
+#else
+                LOG(ERROR) << "GStreamer plugin missing for this stream. Install the codecs, for example: "
+                           << "sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good "
+                           << "gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav";
 #endif
             }
         }

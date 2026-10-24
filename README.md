@@ -177,19 +177,40 @@ checksums, and `gh release create`).
 
 Many stations use AAC or MP3 streams, which need extra GStreamer codecs. They
 are recommended by the package, but if you install manually or use the
-AppImage on a minimal system, add them:
+AppImage on a minimal system, add them.
+
+Debian, Ubuntu, Linux Mint — the `universe` component must be enabled:
 
 ```sh
+sudo apt update
 sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+# if apt says "no installation candidate", check that the component is enabled:
+grep -r --include='*.list' --include='*.sources' -l universe /etc/apt/sources.list*
+sudo add-apt-repository universe && sudo apt update
 ```
 
-Without them the player reports `Error: A plugin is missing from your GStreamer
-installation` and skips to the next stream. To see which plugin is missing:
+Other distributions:
 
 ```sh
-sudo apt install gstreamer1.0-tools
-GST_DEBUG=3 gst-play-1.0 "http://your-station/stream" 2>&1 | grep -i "missing\|error"
+# Fedora (RPM Fusion for freeworld codecs)
+sudo dnf install gstreamer1-plugins-bad-free gstreamer1-plugins-ugly gstreamer1-plugins-bad-freeworld
+# Arch / Manjaro
+sudo pacman -S gst-plugins-bad gst-plugins-ugly gst-libav
+# openSUSE
+sudo zypper install gstreamer-plugins-bad gstreamer-plugins-ugly gstreamer-plugins-libav
 ```
+
+Without the codecs the player logs the exact element that is missing and the
+package providing it, for example:
+
+```
+ERROR GStreamer detail: no element "avdec_aac"
+ERROR Missing GStreamer element: avdec_aac
+ERROR Debian/Ubuntu: sudo apt install gstreamer1.0-libav
+ERROR To list the installed plugins: gst-inspect-1.0 | grep -i aac
+```
+
+The playback then skips to the next stream of the playlist.
 
 The generated packages require `gstreamer1.0-plugins-base` and
 `gstreamer1.0-plugins-good` by default. `gstreamer1.0-plugins-bad` is optional
