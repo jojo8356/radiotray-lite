@@ -49,25 +49,32 @@ set_menu_item_icon(GMenuItem* item, const std::string& icon_file)
     g_object_unref(file);
 }
 #else
-void
-set_menu_item_icon(Gtk::MenuItem& item, const std::string& icon_file)
+// Gtk::MenuItem has no image support, Gtk::ImageMenuItem has. The entry is
+// created here so that a station without a usable icon simply gets a plain
+// text entry.
+Gtk::MenuItem*
+make_menu_item(const Glib::ustring& label, const std::string& icon_file)
 {
-    if (icon_file.empty()) {
-        return;
+    if (not icon_file.empty()) {
+        try {
+            // Load a reasonably small pixbuf, the menu entry scales it down itself.
+            auto pixbuf = Gdk::Pixbuf::create_from_file(icon_file, 64, 64, true);
+            if (pixbuf) {
+                auto image = Gtk::manage(new Gtk::Image(pixbuf));
+                image->set_pixel_size(16);
+
+                auto item = Gtk::manage(new Gtk::ImageMenuItem(label, false));
+                item->set_image(*image);
+                item->set_always_show_image(true);
+
+                return item;
+            }
+        } catch (const Glib::Error& exc) {
+            LOG(WARNING) << "Couldn't load icon '" << icon_file << "': " << exc.what();
+        }
     }
 
-    try {
-        // Load a reasonably small pixbuf, the menu entry scales it down itself.
-        auto pixbuf = Gdk::Pixbuf::create_from_file(icon_file, 64, 64, true);
-        if (pixbuf) {
-            auto image = Gtk::manage(new Gtk::Image(pixbuf));
-            image->set_pixel_size(16);
-            item.set_image(*image);
-            item.set_always_show_image(true);
-        }
-    } catch (const Glib::Error& exc) {
-        LOG(WARNING) << "Couldn't load icon '" << icon_file << "': " << exc.what();
-    }
+    return Gtk::manage(new Gtk::MenuItem(label));
 }
 #endif
 
@@ -128,8 +135,7 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
         radiotray.owned_submenus.push_back(submenu);
         menus.push(submenu);
 #else
-        auto menu_item = Gtk::manage(new Gtk::MenuItem(group_name));
-        set_menu_item_icon(*menu_item, icon_file);
+        auto menu_item = make_menu_item(group_name, icon_file);
         auto submenu = Gtk::manage(new Gtk::Menu());
 
         menus.top()->append(*menu_item);
@@ -165,8 +171,7 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
                                             station_url,
                                             icon_file);
 #else
-            auto sub_item = Gtk::manage(new Gtk::MenuItem(station_name));
-            set_menu_item_icon(*sub_item, icon_file);
+            auto sub_item = make_menu_item(station_name, icon_file);
             sub_item->signal_activate().connect(sigc::bind<Glib::ustring, Glib::ustring, Glib::ustring>(
                 sigc::mem_fun(radiotray, &RadioTrayLite::on_station_button), station_group_name, station_name, station_url));
             menus.top()->append(*sub_item);
@@ -940,7 +945,7 @@ RadioTrayLite::apply_tray_icon(const std::string& icon)
     }
 
     if (icon.find('/') == std::string::npos) {
-        status_icon->set(icon);
+        status_icon->set(Glib::ustring(icon));
         return;
     }
 
