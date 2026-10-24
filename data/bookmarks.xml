@@ -1,5 +1,26 @@
 <bookmarks>
   <group name="root">
+    <!--
+      Custom icons (optional). Both attributes work on <group> and <bookmark>:
+
+        icon="https://example.org/logo.png"   icon served by an URL, downloaded
+                                              on first use
+        icon="icons/logo.png"                 local file, relative to this file
+        icon="~/pictures/logo.png"            local file, ~ or absolute path
+        icon_path="~/.local/share/radiotray-lite/icons/logo.png"
+                                              where a downloaded icon is stored.
+                                              If the file is already there it is
+                                              reused, otherwise it is downloaded
+                                              from "icon".
+
+      Without icon_path, downloaded icons are stored in
+      $XDG_CACHE_HOME/radiotray-lite/icons/.
+
+      <bookmark name="Radio Paradise"
+                url="https://www.radioparadise.com/m3u/aac-320.m3u"
+                icon="https://www.radioparadise.com/graphics/favicon.png"
+                icon_path="~/.local/share/radiotray-lite/icons/paradise.png"/>
+    -->
     <group name="Modern">
       <bookmark name="Radio Paradise" url="https://www.radioparadise.com/m3u/aac-320.m3u"/>
       <bookmark name="RNE Radio 3" url="http://radio3.rtveradio.cires21.com/radio3.mp3"/>

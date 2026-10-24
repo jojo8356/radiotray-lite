@@ -26,6 +26,7 @@
 #include "about.hpp"
 #include "config.hpp"
 #include "constants.hpp"
+#include "icon_cache.hpp"
 #include "notification.hpp"
 #include "player.hpp"
 #include "options.hpp"
@@ -73,6 +74,9 @@ private:
 
     std::string bookmarks_file;
     pugi::xml_document bookmarks_doc;
+
+    // Custom icons referenced from bookmarks.xml, possibly downloaded.
+    IconCache icon_cache;
 
     std::shared_ptr<Player> player;
     std::shared_ptr<EventManager> em;
@@ -168,7 +172,8 @@ private:
                                IndicatorAction::Type type,
                                const Glib::ustring& group_name = Glib::ustring(),
                                const Glib::ustring& station_name = Glib::ustring(),
-                               const Glib::ustring& station_url = Glib::ustring());
+                               const Glib::ustring& station_url = Glib::ustring(),
+                               const std::string& icon_file = std::string());
     void set_indicator_icon(const char* icon_name);
 #endif
 
@@ -176,6 +181,9 @@ private:
 
     bool file_exists(const std::string& dir, const std::string& file);
     bool dir_exists(const std::string& dir);
+
+    std::string bookmarks_dir() const;
+    std::string bookmark_icon_file(const pugi::xml_node& node);
 };
 
 } // namespace radiotray

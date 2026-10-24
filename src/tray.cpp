@@ -1,5 +1,7 @@
 #include <cstring>
 
+#include <gio/gio.h>
+
 #include "tray.hpp"
 
 namespace radiotray
@@ -30,6 +32,45 @@ appindicator_gtk3_log_handler(const gchar* log_domain,
 
 #endif
 
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+void
+set_menu_item_icon(GMenuItem* item, const std::string& icon_file)
+{
+    if (item == nullptr or icon_file.empty()) {
+        return;
+    }
+
+    auto* file = g_file_new_for_path(icon_file.c_str());
+    auto* icon = g_file_icon_new(file);
+
+    g_menu_item_set_icon(item, G_ICON(icon));
+
+    g_object_unref(icon);
+    g_object_unref(file);
+}
+#else
+void
+set_menu_item_icon(Gtk::MenuItem& item, const std::string& icon_file)
+{
+    if (icon_file.empty()) {
+        return;
+    }
+
+    try {
+        // Load a reasonably small pixbuf, the menu entry scales it down itself.
+        auto pixbuf = Gdk::Pixbuf::create_from_file(icon_file, 64, 64, true);
+        if (pixbuf) {
+            auto image = Gtk::manage(new Gtk::Image(pixbuf));
+            image->set_pixel_size(16);
+            item.set_image(*image);
+            item.set_always_show_image(true);
+        }
+    } catch (const Glib::Error& exc) {
+        LOG(WARNING) << "Couldn't load icon '" << icon_file << "': " << exc.what();
+    }
+}
+#endif
+
 } // namespace
 
 RadioTrayLite::BookmarksWalker::BookmarksWalker(RadioTrayLite& radiotray,
@@ -58,6 +99,13 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
     auto is_group = strcasecmp(name, "group") == 0;
     auto is_bookmark = strcasecmp(name, "bookmark") == 0;
 
+    // Custom icon of the group or of the station. A remote icon referenced by
+    // an URL is downloaded once, then the local copy is reused.
+    auto icon_file = std::string();
+    if (is_group or is_bookmark) {
+        icon_file = radiotray.bookmark_icon_file(node);
+    }
+
     auto adjust_menu_level = [&]() {
         while (menus.size() >= static_cast<size_t>(depth())) {
             menus.pop();
@@ -70,6 +118,7 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
         auto group_name = attr_name.as_string();
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
         auto menu_item = g_menu_item_new(group_name, nullptr);
+        set_menu_item_icon(menu_item, icon_file);
         auto submenu = g_menu_new();
 
         g_menu_item_set_submenu(menu_item, G_MENU_MODEL(submenu));
@@ -80,6 +129,7 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
         menus.push(submenu);
 #else
         auto menu_item = Gtk::manage(new Gtk::MenuItem(group_name));
+        set_menu_item_icon(*menu_item, icon_file);
         auto submenu = Gtk::manage(new Gtk::Menu());
 
         menus.top()->append(*menu_item);
@@ -112,9 +162,11 @@ RadioTrayLite::BookmarksWalker::for_each(pugi::xml_node& node)
                                             IndicatorAction::Type::Station,
                                             station_group_name,
                                             station_name,
-                                            station_url);
+                                            station_url,
+                                            icon_file);
 #else
             auto sub_item = Gtk::manage(new Gtk::MenuItem(station_name));
+            set_menu_item_icon(*sub_item, icon_file);
             sub_item->signal_activate().connect(sigc::bind<Glib::ustring, Glib::ustring, Glib::ustring>(
                 sigc::mem_fun(radiotray, &RadioTrayLite::on_station_button), station_group_name, station_name, station_url));
             menus.top()->append(*sub_item);
@@ -362,10 +414,12 @@ RadioTrayLite::append_indicator_item(GMenu* target,
                                      IndicatorAction::Type type,
                                      const Glib::ustring& group_name,
                                      const Glib::ustring& station_name,
-                                     const Glib::ustring& station_url)
+                                     const Glib::ustring& station_url,
+                                     const std::string& icon_file)
 {
     auto detailed_action = add_indicator_action(type, group_name, station_name, station_url);
     auto menu_item = g_menu_item_new(label.c_str(), detailed_action.c_str());
+    set_menu_item_icon(menu_item, icon_file);
     g_menu_append_item(target, menu_item);
     g_object_unref(menu_item);
 }
@@ -467,6 +521,11 @@ RadioTrayLite::build_menu()
 void
 RadioTrayLite::rebuild_menu()
 {
+    // Forget cached resolutions so that icons that failed to download (or that
+    // were removed from disk) are looked up again. Files already downloaded are
+    // kept, they are only fetched again when they are missing.
+    icon_cache.clear();
+
     clear_menu();
     build_menu();
 }
@@ -816,5 +875,42 @@ RadioTrayLite::dir_exists(const std::string& dir)
 
     return (rc == 0 and S_ISDIR(st.st_mode));
 };
+
+std::string
+RadioTrayLite::bookmarks_dir() const
+{
+    auto pos = bookmarks_file.find_last_of('/');
+    if (pos == std::string::npos) {
+        return std::string();
+    }
+
+    // Keep the trailing slash: relative icon paths are resolved against it.
+    return bookmarks_file.substr(0, pos + 1);
+}
+
+std::string
+RadioTrayLite::bookmark_icon_file(const pugi::xml_node& node)
+{
+    auto attr_icon = node.attribute("icon");
+    auto attr_icon_path = node.attribute("icon_path");
+    if (attr_icon_path.empty()) {
+        attr_icon_path = node.attribute("icon-path");
+    }
+
+    std::string icon = attr_icon.as_string();
+    std::string icon_path = attr_icon_path.as_string();
+
+    if (icon.empty() and icon_path.empty()) {
+        return std::string();
+    }
+
+    auto file = icon_cache.resolve(icon, icon_path, bookmarks_dir());
+
+    if (not file.empty()) {
+        LOG(DEBUG) << "Icon for '" << node.attribute("name").as_string() << "': " << file;
+    }
+
+    return file;
+}
 
 } // namespace radiotray

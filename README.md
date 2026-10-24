@@ -196,6 +196,62 @@ Ayatana AppIndicator, and GTK/libadwaita compatibility.
 Copy your existing `bookmarks.xml` from [Radio Tray](http://radiotray.sourceforge.net/) (which is usually located at
 `$HOME/.local/share/radiotray/bookmarks.xml`) into `$HOME/.config/radiotray-lite/` directory.
 
+### Custom Station Icons
+
+Stations and groups may carry their own icon. Two optional attributes are
+recognized on `<bookmark>` and `<group>` elements:
+
+- `icon`: an `http://`, `https://` or `ftp://` URL, or a local file path. Local
+  paths accept `~`, absolute paths, and paths relative to the directory that
+  contains `bookmarks.xml`.
+- `icon_path` (also spelled `icon-path`): where a remote icon is stored on disk.
+
+```xml
+<bookmarks>
+  <group name="root">
+    <group name="Radio Paradise" icon="icons/paradise.png">
+      <bookmark name="Main Mix"
+                url="https://www.radioparadise.com/m3u/aac-320.m3u"
+                icon="https://www.radioparadise.com/graphics/favicon.png"
+                icon_path="~/.local/share/radiotray-lite/icons/paradise.png"/>
+      <bookmark name="Rock 181"
+                url="http://listen.181fm.com/181-rock_64k.aac"
+                icon="https://example.org/logos/rock181.png"/>
+    </group>
+  </group>
+</bookmarks>
+```
+
+Resolution rules:
+
+| `icon`   | `icon_path` | Result                                                                    |
+|----------|-------------|---------------------------------------------------------------------------|
+| absent   | absent      | No icon, plain text menu entry.                                           |
+| path     | absent      | The path is used as is; nothing is downloaded.                            |
+| absent   | path        | Same as above (`icon_path` alone is treated as the icon file).            |
+| URL      | path        | The file is used if it already exists, otherwise downloaded from the URL. |
+| URL      | absent      | Same, but stored in `$XDG_CACHE_HOME/radiotray-lite/icons/`.              |
+
+Remote icons are downloaded only once, when the menu is built and the file is
+missing: after that the local copy is reused and no network access happens. The
+download happens while the menu is being built, so the first start after adding
+a new icon URL may take a moment.
+Downloads are written to a `<file>.part` file and renamed when complete, are
+limited to 4 MiB, and are rejected unless the server answers with a 2xx status
+and an image (checked through the `Content-Type` header and the file
+signature). Icons that are missing or cannot be loaded are ignored and the
+entry is displayed without an image.
+
+Any format supported by GdkPixbuf works: PNG, JPEG, GIF, BMP, WEBP, SVG and
+XPM. Icons are scaled down to the menu size; use square images of at least
+32x32 pixels for a sharp result.
+
+Use *Reload Bookmarks* from the menu to retry icons that failed to download.
+Note that menu icons are drawn by the panel: they are displayed with the
+`gtk-status-icon` backend and, depending on the desktop, with the
+`ayatana-glib` backend; AppIndicator panels that ignore icon attributes of a
+D-Bus menu will only show the labels.
+
 ### Options
 
 Configuration file is located in the same directory as bookmarks file. It has simple XML format and following options are supported:
