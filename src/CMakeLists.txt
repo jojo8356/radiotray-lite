@@ -51,6 +51,7 @@ add_executable(
     icon_cache.cpp
     app_paths.cpp
     gst_diagnostics.cpp
+    url_utils.cpp
     config.cpp
     options.cpp
     event_manager.cpp

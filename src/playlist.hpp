@@ -43,10 +43,14 @@ private:
 
     bool abort_get_request = false;
     std::string data;
+    // URL after redirections, used to resolve relative playlist entries.
+    std::string effective_url;
 
     std::map<PlaylistDecoderType, std::shared_ptr<PlaylistDecoder>> decoders;
 
     void prepare_playlist_request(const std::string& url, bool only_headers);
+    void update_effective_url();
+    void resolve_stream_urls(MediaStreams& streams, const std::string& url);
     long get_http_status();
     std::string get_content_type();
     MediaStreams run_playlist_decoders(const std::string& url);

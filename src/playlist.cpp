@@ -1,5 +1,7 @@
 #include "playlist.hpp"
 
+#include "url_utils.hpp"
+
 namespace radiotray
 {
 
@@ -84,6 +86,33 @@ Playlist::get_streams(const std::string& url)
 }
 
 void
+Playlist::update_effective_url()
+{
+    char* url = nullptr;
+
+    if (curl_easy_getinfo(handle, CURLINFO_EFFECTIVE_URL, &url) == CURLE_OK and url != nullptr) {
+        effective_url = url;
+    }
+}
+
+void
+Playlist::resolve_stream_urls(MediaStreams& streams, const std::string& url)
+{
+    // Playlists may contain relative entries ("stream.aac", "/live",
+    // "../other.pls"); resolve them against the playlist URL, using the
+    // post-redirection URL when it is known.
+    const auto& base = effective_url.empty() ? url : effective_url;
+
+    for (auto& stream : streams) {
+        auto resolved = resolve_url(base, stream);
+        if (resolved != stream) {
+            LOG(DEBUG) << "Resolved stream '" << stream << "' to '" << resolved << "'";
+            stream = resolved;
+        }
+    }
+}
+
+void
 Playlist::set_config(const std::shared_ptr<Config>& cfg)
 {
     config = cfg;
@@ -93,6 +122,7 @@ void
 Playlist::prepare_playlist_request(const std::string& url, bool only_headers)
 {
     data.clear();
+    effective_url.clear();
     curl_easy_reset(handle);
 
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1);
@@ -162,6 +192,7 @@ Playlist::run_playlist_decoders(const std::string& url)
                 prepare_playlist_request(url, not kOnlyHeaders);
                 auto rc = curl_easy_perform(handle);
                 if (rc == CURLE_OK) {
+                    update_effective_url();
                     LOG(DEBUG) << "Playlist: " << data;
                     streams = decoder.second->extract_media_streams(data);
                     for (auto& s : streams) {
@@ -180,6 +211,7 @@ Playlist::run_playlist_decoders(const std::string& url)
         prepare_playlist_request(url, not kOnlyHeaders);
         auto rc = curl_easy_perform(handle);
         if (rc == CURLE_OK) {
+            update_effective_url();
             LOG(DEBUG) << "Matched " << decoder->desc() << " by URL extension";
             LOG(DEBUG) << "Playlist: " << data;
             streams = decoder->extract_media_streams(data);
@@ -198,6 +230,7 @@ Playlist::run_playlist_decoders(const std::string& url)
         abort_get_request = false;
 
         if (rc == CURLE_OK or rc == CURLE_WRITE_ERROR /* it's ok, we've aborted reading */) {
+            update_effective_url();
             auto type = guess_playlist_decoder_type();
             if (type != PlaylistDecoderType::UNKNOWN_PLAYLIST_DECODER) {
                 const auto& decoder = decoders[type];
@@ -210,6 +243,8 @@ Playlist::run_playlist_decoders(const std::string& url)
     // No decoder found, consider url a media stream
     if (streams.empty() and not extracted) {
         streams.push_back(url);
+    } else {
+        resolve_stream_urls(streams, url);
     }
 
     return streams;

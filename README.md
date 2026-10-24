@@ -218,7 +218,16 @@ Check what is installed and test a stream outside the application
 
 ```sh
 gst-inspect-1.0 | grep -Ei 'aacparse|faad|avdec_aac|avdec_mp3'
-gst-launch-1.0 playbin uri="https://www.radioparadise.com/m3u/aac-320.m3u"
+```
+
+To test with `gst-launch-1.0`, use the stream URL, **not** the playlist URL:
+`playbin` has no playlist parser (`text/uri-list` / "no suitable plugins"),
+while Radio Tray Lite resolves M3U/PLS/ASX/XSPF itself.
+
+```sh
+# the .m3u contains the real stream URL
+curl -sL "https://www.radioparadise.com/m3u/aac-320.m3u"
+gst-launch-1.0 playbin uri="https://stream.radioparadise.com/aac-320"
 ```
 
 ### Third-party repositories and the i386 warnings
