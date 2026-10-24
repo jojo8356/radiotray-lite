@@ -265,9 +265,29 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
 
     load_configuration();
 
+    // Without a display GTK aborts while creating the application, which is
+    // hard to diagnose; fail with an explicit message instead.
+    auto display = getenv("DISPLAY");
+    auto wayland_display = getenv("WAYLAND_DISPLAY");
+    if ((display == nullptr or *display == '\0') and (wayland_display == nullptr or *wayland_display == '\0')) {
+        LOG(ERROR) << "No graphical display found (DISPLAY and WAYLAND_DISPLAY are unset). "
+                   << "Start radiotray-lite from the desktop session, not from a plain TTY or a remote shell.";
+        return false;
+    }
+
     // app = Gtk::Application::create(argc, argv, "github.com.thekvs.radiotray-lite");
     app = Gtk::Application::create("github.com.thekvs.radiotray-lite");
-    app->register_application();
+
+    // gtkmm throws Glib::Error when the application can't be registered, for
+    // example when there is no session D-Bus. An uncaught exception calls
+    // std::terminate, which is reported as a bare abort().
+    try {
+        app->register_application();
+    } catch (const Glib::Error& exc) {
+        LOG(ERROR) << "Couldn't register the GTK application: " << exc.what();
+        LOG(ERROR) << "Check that DBUS_SESSION_BUS_ADDRESS is set and that a session bus is running.";
+        return false;
+    }
     if (app->is_remote()) {
         LOG(WARNING) << "This application is already running!";
         return false;
