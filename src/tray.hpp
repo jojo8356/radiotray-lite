@@ -174,8 +174,12 @@ private:
                                const Glib::ustring& station_name = Glib::ustring(),
                                const Glib::ustring& station_url = Glib::ustring(),
                                const std::string& icon_file = std::string());
-    void set_indicator_icon(const char* icon_name);
 #endif
+
+    // Tray (status area) icon, configurable through config.xml.
+    std::string resolve_tray_icon(bool playing, const Glib::ustring& station_name = Glib::ustring());
+    void apply_tray_icon(const std::string& icon);
+    std::string station_icon_file(const Glib::ustring& station_name);
 
     void copy_default_bookmarks(const std::string& src_file);
 

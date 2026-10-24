@@ -13,6 +13,18 @@ Config::set_config_file(const std::string& name)
     filename = name;
 }
 
+std::string
+Config::config_dir() const
+{
+    auto pos = filename.find_last_of('/');
+    if (pos == std::string::npos) {
+        return std::string();
+    }
+
+    // Keep the trailing slash: relative paths are resolved against it.
+    return filename.substr(0, pos + 1);
+}
+
 void
 Config::load_config()
 {
@@ -47,6 +59,16 @@ Config::load_config()
             node = config.select_node("/config/option[@name='notifications']");
             if (not node.node().empty()) {
                 notifications = node.node().attribute("value").as_bool();
+            }
+
+            node = config.select_node("/config/option[@name='tray_icon']");
+            if (not node.node().empty()) {
+                tray_icon = node.node().attribute("value").as_string();
+            }
+
+            node = config.select_node("/config/option[@name='tray_icon_follow_station']");
+            if (not node.node().empty()) {
+                tray_icon_follow_station = node.node().attribute("value").as_bool();
             }
         } catch (pugi::xpath_exception& exc) {
             LOG(ERROR) << "XPath query error: " << exc.what() << " File: " << filename;

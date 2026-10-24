@@ -268,6 +268,8 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
     app_indicator_set_menu(indicator, menu->gobj());
 #endif
 
+    apply_tray_icon(resolve_tray_icon(false));
+
     initialized = true;
 
     return true;
@@ -424,11 +426,6 @@ RadioTrayLite::append_indicator_item(GMenu* target,
     g_object_unref(menu_item);
 }
 
-void
-RadioTrayLite::set_indicator_icon(const char* icon_name)
-{
-    app_indicator_set_icon(indicator, icon_name, kAppName);
-}
 #endif
 
 bool
@@ -757,22 +754,10 @@ RadioTrayLite::on_station_changed_signal(const Glib::ustring& station, StationSt
     }
 
     if (state == StationState::PLAYING) {
-#ifdef APPINDICATOR_USE_AYATANA_GLIB
-        set_indicator_icon(kAppIndicatorIconOn);
-#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
-        status_icon->set(kAppIndicatorIconOn);
-#else
-        app_indicator_set_icon(indicator, kAppIndicatorIconOn);
-#endif
+        apply_tray_icon(resolve_tray_icon(true, station));
         set_current_broadcast(station);
     } else {
-#ifdef APPINDICATOR_USE_AYATANA_GLIB
-        set_indicator_icon(kAppIndicatorIconOff);
-#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
-        status_icon->set(kAppIndicatorIconOff);
-#else
-        app_indicator_set_icon(indicator, kAppIndicatorIconOff);
-#endif
+        apply_tray_icon(resolve_tray_icon(false, station));
     }
 }
 
@@ -886,6 +871,84 @@ RadioTrayLite::bookmarks_dir() const
 
     // Keep the trailing slash: relative icon paths are resolved against it.
     return bookmarks_file.substr(0, pos + 1);
+}
+
+std::string
+RadioTrayLite::station_icon_file(const Glib::ustring& station_name)
+{
+    if (not config->tray_icon_follow_station or station_name.empty()) {
+        return std::string();
+    }
+
+    for (auto node : bookmarks_doc.select_nodes("//bookmark")) {
+        auto bookmark = node.node();
+        if (station_name == bookmark.attribute("name").as_string()) {
+            return bookmark_icon_file(bookmark);
+        }
+    }
+
+    return std::string();
+}
+
+std::string
+RadioTrayLite::resolve_tray_icon(bool playing, const Glib::ustring& station_name)
+{
+    // 1. Icon of the station being played, when enabled in config.xml.
+    if (playing) {
+        auto station_icon = station_icon_file(station_name);
+        if (not station_icon.empty()) {
+            return station_icon;
+        }
+    }
+
+    // 2. Tray icon configured in config.xml (local path or URL).
+    if (not config->tray_icon.empty()) {
+        auto icon = icon_cache.resolve(config->tray_icon, std::string(), config->config_dir());
+        if (not icon.empty()) {
+            return icon;
+        }
+
+        LOG(WARNING) << "Couldn't use the tray icon '" << config->tray_icon << "', using the default one";
+    }
+
+    // 3. Built-in icon name from the images directory.
+    return playing ? kAppIndicatorIconOn : kAppIndicatorIconOff;
+}
+
+void
+RadioTrayLite::apply_tray_icon(const std::string& icon)
+{
+    if (icon.empty()) {
+        return;
+    }
+
+#ifdef APPINDICATOR_USE_AYATANA_GLIB
+    // Accepts both a theme icon name and an absolute file path.
+    app_indicator_set_icon(indicator, icon.c_str(), kAppName);
+#elif defined(APPINDICATOR_USE_GTK_STATUS_ICON)
+    if (not status_icon) {
+        return;
+    }
+
+    if (icon.find('/') == std::string::npos) {
+        status_icon->set(icon);
+        return;
+    }
+
+    try {
+        // Scale custom images down: GtkStatusIcon draws the pixbuf as is.
+        auto pixbuf = Gdk::Pixbuf::create_from_file(icon, 24, 24, true);
+        if (pixbuf) {
+            status_icon->set(pixbuf);
+        }
+    } catch (const Glib::Error& exc) {
+        LOG(WARNING) << "Couldn't load tray icon '" << icon << "': " << exc.what();
+        status_icon->set(kAppIndicatorIconOff);
+    }
+#else
+    // Accepts both a theme icon name and an absolute file path.
+    app_indicator_set_icon(indicator, icon.c_str());
+#endif
 }
 
 std::string

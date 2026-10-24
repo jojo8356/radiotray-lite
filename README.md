@@ -262,6 +262,13 @@ Configuration file is located in the same directory as bookmarks file. It has si
 - `url_timeout`: timeout in seconds for fetching playlist files.
 - `notifications`: set to `false` to disable desktop notifications. Default is
   `true`.
+- `tray_icon`: icon shown in the system tray / status area. A local path
+  (`~`, absolute, or relative to the config file directory) or an `http(s)`/
+  `ftp` URL, which is downloaded once and cached. Empty by default, which keeps
+  the built-in `radiotray_on`/`radiotray_off` icons.
+- `tray_icon_follow_station`: set to `true` to display the icon of the station
+  being played (the `icon` attribute of its bookmark) in the tray while it
+  plays. Default is `false`.
 
 Example:
 
@@ -273,8 +280,38 @@ Example:
   <option name="buffer_duration" value="2" />
   <option name="url_timeout" value="5" />
   <option name="notifications" value="false" />
+  <option name="tray_icon" value="~/.local/share/radiotray-lite/icons/app.png" />
+  <option name="tray_icon_follow_station" value="true" />
 </config>
 ```
+
+### Tray Icon
+
+The icon drawn in the panel above the menu comes from `tray_icon` in
+`config.xml`; when no icon is configured, the built-in images are used.
+
+```xml
+<config>
+  <!-- local file, absolute path or URL (downloaded once into
+       $XDG_CACHE_HOME/radiotray-lite/icons/) -->
+  <option name="tray_icon" value="https://example.org/my-radio.png" />
+  <!-- while a station plays, use the icon of its bookmark instead -->
+  <option name="tray_icon_follow_station" value="true" />
+</config>
+```
+
+Resolution order for the tray icon:
+
+1. the playing station's `icon` attribute, when `tray_icon_follow_station` is
+   `true` and the station has an icon;
+2. `tray_icon` from `config.xml`;
+3. the built-in `radiotray_on` / `radiotray_off` icon.
+
+Note that Radio Tray's `gui_engine` option (`appindicator`, `systray`,
+`chooser`) is **not** used by Radio Tray Lite: it only selected the GUI class
+that drew the tray in the Python version, and never described an icon. Here the
+tray backend is chosen at build time with
+`-DRADIOTRAY_APPINDICATOR_BACKEND=...` (see the AppIndicator Backend section).
 
 ## Licensing
 

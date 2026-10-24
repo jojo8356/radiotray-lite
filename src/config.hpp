@@ -21,6 +21,7 @@ public:
 
     void set_config_file(const std::string& name);
     void load_config();
+    std::string config_dir() const;
     bool has_last_station();
     void set_last_played_station(const Glib::ustring& station);
     Glib::ustring get_last_played_station() const;
@@ -29,6 +30,13 @@ public:
     long url_timeout_ms = kDefaultHTTPRequestTimeout;
     int buffer_size = kDefaultGStreamerBufferSize;
     int64_t buffer_duration = kDefaultBufferDuration;
+
+    // Tray (status area) icon: empty means the built-in Radio Tray Lite icons.
+    // A local path or an URL (downloaded on first use) may be given.
+    std::string tray_icon;
+    // When true, the icon of the playing station (bookmarks.xml 'icon'
+    // attribute) replaces the tray icon while it plays.
+    bool tray_icon_follow_station = false;
 
 private:
     std::string filename;
