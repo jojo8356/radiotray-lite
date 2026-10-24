@@ -214,6 +214,16 @@ Ayatana AppIndicator, and GTK/libadwaita compatibility.
 
 ### Bookmarks
 
+The application reads `$HOME/.config/radiotray-lite/bookmarks.xml`. When that
+file does not exist yet, the default bookmarks shipped with the package (or
+`data/bookmarks.xml` when running a build from the source tree) are copied
+there on startup. A specific file can be used instead:
+
+```sh
+radiotray-lite --bookmarks /path/to/bookmarks.xml   # config.xml is read from
+                                                   # the same directory
+```
+
 Copy your existing `bookmarks.xml` from [Radio Tray](http://radiotray.sourceforge.net/) (which is usually located at
 `$HOME/.local/share/radiotray/bookmarks.xml`) into `$HOME/.config/radiotray-lite/` directory.
 

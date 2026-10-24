@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <memory>
+#include <string>
 
 #include <getopt.h>
 
@@ -18,6 +19,10 @@ public:
 
     bool resume = false;
     bool help = false;
+
+    // Fully qualified path of an alternative bookmarks file. Its directory is
+    // also used to look for config.xml.
+    std::string bookmarks;
 };
 
 } // namespace

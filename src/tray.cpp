@@ -32,6 +32,53 @@ appindicator_gtk3_log_handler(const gchar* log_domain,
 
 #endif
 
+bool
+is_regular_file(const std::string& path)
+{
+    if (path.empty()) {
+        return false;
+    }
+
+    struct stat st;
+    std::memset(&st, 0, sizeof(st));
+
+    return (stat(path.c_str(), &st) == 0 and S_ISREG(st.st_mode));
+}
+
+std::string
+expand_user_path(const std::string& path)
+{
+    if (path == "~" or path.compare(0, 2, "~/") == 0) {
+        auto home = getenv("HOME");
+        if (home != nullptr and *home != '\0') {
+            return std::string(home) + path.substr(1);
+        }
+    }
+
+    return path;
+}
+
+// Directory of the running binary, with a trailing slash (empty on failure).
+std::string
+executable_dir()
+{
+    char buffer[4096];
+    auto len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (len <= 0) {
+        return std::string();
+    }
+
+    buffer[len] = '\0';
+
+    std::string path(buffer);
+    auto pos = path.find_last_of('/');
+    if (pos == std::string::npos) {
+        return std::string();
+    }
+
+    return path.substr(0, pos + 1);
+}
+
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
 void
 set_menu_item_icon(GMenuItem* item, const std::string& icon_file)
@@ -602,17 +649,67 @@ RadioTrayLite::load_configuration()
 
     dist_config_dir = std::string(INSTALL_PREFIX "/share/") + kAppDirName + "/";
 
+    // 1. --bookmarks FILE wins over everything else.
+    if (cmd_line_options and not cmd_line_options->bookmarks.empty()) {
+        bookmarks_file = expand_user_path(cmd_line_options->bookmarks);
+
+        if (not is_regular_file(bookmarks_file)) {
+            LOG(WARNING) << "Bookmarks file given on the command line doesn't exist: '" << bookmarks_file << "'";
+        }
+
+        auto pos = bookmarks_file.find_last_of('/');
+        auto config_dir = (pos == std::string::npos) ? std::string() : bookmarks_file.substr(0, pos + 1);
+
+        config->set_config_file(config_dir + kConfigFileName);
+        if (file_exists(config_dir, kConfigFileName)) {
+            config->load_config();
+        }
+
+        LOG(INFO) << "Using bookmarks file: " << bookmarks_file;
+        return;
+    }
+
+    // 2. User configuration directory.
     if (file_exists(user_config_dir, kBookmarksFileName)) {
         bookmarks_file = user_config_dir + kBookmarksFileName;
         has_user_bookmarks = true;
     }
 
+    // 3. Installed default bookmarks, or the ones from a source/build tree
+    //    when the binary is started without being installed.
     if (not has_user_bookmarks) {
-        if (file_exists(dist_config_dir, kBookmarksFileName)) {
-            bookmarks_file = dist_config_dir + kBookmarksFileName;
-            copy_default_bookmarks(bookmarks_file);
-        } else {
-            LOG(WARNING) << "Distribution's bookmarks file doesn't exist in '" << dist_config_dir << "'";
+        std::vector<std::string> candidates;
+        candidates.push_back(dist_config_dir + kBookmarksFileName);
+
+        auto exe_dir = executable_dir();
+        if (not exe_dir.empty()) {
+            // build/src/radiotray-lite -> <repo>/data/bookmarks.xml
+            candidates.push_back(exe_dir + "../../data/" + kBookmarksFileName);
+            candidates.push_back(exe_dir + "../data/" + kBookmarksFileName);
+            candidates.push_back(exe_dir + "data/" + kBookmarksFileName);
+            candidates.push_back(exe_dir + "../share/" + kAppDirName + "/" + kBookmarksFileName);
+        }
+
+        for (const auto& candidate : candidates) {
+            if (is_regular_file(candidate)) {
+                LOG(INFO) << "Using default bookmarks file: " << candidate;
+                copy_default_bookmarks(candidate);
+
+                // Prefer the user's copy, so that edits made to bookmarks.xml
+                // (custom icons included) are the ones that get used.
+                auto user_bookmarks = user_config_dir + kBookmarksFileName;
+                if (is_regular_file(user_bookmarks)) {
+                    bookmarks_file = user_bookmarks;
+                } else {
+                    bookmarks_file = candidate;
+                }
+                break;
+            }
+        }
+
+        if (bookmarks_file.empty()) {
+            LOG(WARNING) << "No bookmarks file found. Create '" << user_config_dir << kBookmarksFileName << "'"
+                         << " or pass --bookmarks FILE";
         }
     }
 
@@ -620,6 +717,15 @@ RadioTrayLite::load_configuration()
         config->set_config_file(user_config_dir + kConfigFileName);
         if (file_exists(user_config_dir, kConfigFileName)) {
             config->load_config();
+        }
+    } else if (home != nullptr) {
+        // Make sure the option file has a home even on a fresh profile.
+        auto rc = mkdir(user_config_dir.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+        if (rc == 0 or errno == EEXIST) {
+            config->set_config_file(user_config_dir + kConfigFileName);
+            if (file_exists(user_config_dir, kConfigFileName)) {
+                config->load_config();
+            }
         }
     }
 }
