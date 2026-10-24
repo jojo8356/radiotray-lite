@@ -263,9 +263,12 @@ Configuration file is located in the same directory as bookmarks file. It has si
 - `notifications`: set to `false` to disable desktop notifications. Default is
   `true`.
 - `tray_icon`: icon shown in the system tray / status area. A local path
-  (`~`, absolute, or relative to the config file directory) or an `http(s)`/
-  `ftp` URL, which is downloaded once and cached. Empty by default, which keeps
-  the built-in `radiotray_on`/`radiotray_off` icons.
+  (`~`, absolute, or relative to the config file directory), an `http(s)`/`ftp`
+  URL (downloaded once and cached), or the name of a built-in image
+  (`radiotray_on`, `radiotray_off`, `radiotray_connecting`). Empty by default,
+  which keeps the built-in icons that change with the playback state. As soon
+  as this option is set, the same icon is used whether a station plays or not:
+  the icon stays constant.
 - `tray_icon_follow_station`: set to `true` to display the icon of the station
   being played (the `icon` attribute of its bookmark) in the tray while it
   plays. Default is `false`.
@@ -306,6 +309,21 @@ Resolution order for the tray icon:
    `true` and the station has an icon;
 2. `tray_icon` from `config.xml`;
 3. the built-in `radiotray_on` / `radiotray_off` icon.
+
+So the icon stays constant in the panel when:
+
+- `tray_icon` is set and `tray_icon_follow_station` is `false` (default), or
+- `tray_icon` is set and no station defines an `icon`.
+
+To keep one of the built-in images permanently, without providing a file, use
+its name:
+
+```xml
+<config>
+  <!-- always the "playing" icon, and it never changes -->
+  <option name="tray_icon" value="radiotray_on" />
+</config>
+```
 
 Note that Radio Tray's `gui_engine` option (`appindicator`, `systray`,
 `chooser`) is **not** used by Radio Tray Lite: it only selected the GUI class

@@ -901,14 +901,23 @@ RadioTrayLite::resolve_tray_icon(bool playing, const Glib::ustring& station_name
         }
     }
 
-    // 2. Tray icon configured in config.xml (local path or URL).
+    // 2. Tray icon configured in config.xml: a local path, an URL, or the name
+    //    of one of the built-in images ("radiotray_on", "radiotray_off").
+    //    It is used for both states, so the icon stays constant in the panel.
     if (not config->tray_icon.empty()) {
-        auto icon = icon_cache.resolve(config->tray_icon, std::string(), config->config_dir());
+        const auto& value = config->tray_icon;
+        auto is_theme_name = (value.find('/') == std::string::npos and value.find('.') == std::string::npos and value.find(':') == std::string::npos);
+
+        if (is_theme_name) {
+            return value;
+        }
+
+        auto icon = icon_cache.resolve(value, std::string(), config->config_dir());
         if (not icon.empty()) {
             return icon;
         }
 
-        LOG(WARNING) << "Couldn't use the tray icon '" << config->tray_icon << "', using the default one";
+        LOG(WARNING) << "Couldn't use the tray icon '" << value << "', using the default one";
     }
 
     // 3. Built-in icon name from the images directory.
