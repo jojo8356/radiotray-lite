@@ -1,12 +1,14 @@
 #include "notification.hpp"
 
+#include "app_paths.hpp"
+
 namespace radiotray
 {
 Notification::Notification(const char* app_name, std::shared_ptr<Config>& cfg)
     : app_name(app_name)
     , config(cfg)
 {
-    logo_path = std::string(kImagePath) + std::string(kAppIcon);
+    logo_path = find_app_image(kAppIcon);
 }
 
 Notification::~Notification()
@@ -24,9 +26,20 @@ bool
 Notification::init()
 {
     auto initialized = (notify_init(app_name.c_str()) != 0);
-    logo = Gdk::Pixbuf::create_from_file(logo_path);
 
-    return (initialized and bool(logo));
+    // The logo is optional: a missing or unreadable image must not prevent
+    // notifications from being shown.
+    if (not logo_path.empty()) {
+        try {
+            logo = Gdk::Pixbuf::create_from_file(logo_path);
+        } catch (const Glib::Error& exc) {
+            LOG(WARNING) << "Couldn't load '" << logo_path << "': " << exc.what();
+        }
+    } else {
+        LOG(WARNING) << "Application logo not found, notifications will use the default icon";
+    }
+
+    return initialized;
 }
 
 void
@@ -56,7 +69,11 @@ Notification::on_broadcast_info_changed_signal(const Glib::ustring& station, Gli
         if (notification != nullptr) {
             notify_notification_set_timeout(notification, NOTIFY_EXPIRES_DEFAULT);
             notify_notification_set_urgency(notification, NOTIFY_URGENCY_LOW);
-            notify_notification_set_icon_from_pixbuf(notification, logo->gobj());
+            if (logo) {
+                if (logo) {
+                    notify_notification_set_icon_from_pixbuf(notification, logo->gobj());
+                }
+            }
             notify_notification_show(notification, nullptr);
         }
     } else {

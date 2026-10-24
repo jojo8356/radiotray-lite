@@ -1,18 +1,30 @@
 #include "about.hpp"
 
+#include "app_paths.hpp"
+#include "easyloggingpp/easylogging++.h"
+
 namespace radiotray
 {
 
 AboutDialog::AboutDialog()
 {
-    auto icon = std::string(kImagePath) + std::string(kAppIcon);
-
-    this->set_icon_from_file(icon);
     this->set_program_name(kAppName);
     this->set_version(kAppVersion);
 
-    auto logo = Gdk::Pixbuf::create_from_file(icon);
-    this->set_logo(logo);
+    // Images may be missing when the binary runs from a build tree: never let
+    // that prevent the dialog from opening.
+    auto icon = find_app_image(kAppIcon);
+
+    if (not icon.empty()) {
+        try {
+            this->set_icon_from_file(icon);
+
+            auto logo = Gdk::Pixbuf::create_from_file(icon);
+            this->set_logo(logo);
+        } catch (const Glib::Error& exc) {
+            LOG(WARNING) << "Couldn't load '" << icon << "': " << exc.what();
+        }
+    }
 
     std::vector<Glib::ustring> authors = { kAuthor };
     this->set_authors(authors);

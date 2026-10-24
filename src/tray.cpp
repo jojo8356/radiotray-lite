@@ -2,6 +2,7 @@
 
 #include <gio/gio.h>
 
+#include "app_paths.hpp"
 #include "tray.hpp"
 
 namespace radiotray
@@ -43,40 +44,6 @@ is_regular_file(const std::string& path)
     std::memset(&st, 0, sizeof(st));
 
     return (stat(path.c_str(), &st) == 0 and S_ISREG(st.st_mode));
-}
-
-std::string
-expand_user_path(const std::string& path)
-{
-    if (path == "~" or path.compare(0, 2, "~/") == 0) {
-        auto home = getenv("HOME");
-        if (home != nullptr and *home != '\0') {
-            return std::string(home) + path.substr(1);
-        }
-    }
-
-    return path;
-}
-
-// Directory of the running binary, with a trailing slash (empty on failure).
-std::string
-executable_dir()
-{
-    char buffer[4096];
-    auto len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
-    if (len <= 0) {
-        return std::string();
-    }
-
-    buffer[len] = '\0';
-
-    std::string path(buffer);
-    auto pos = path.find_last_of('/');
-    if (pos == std::string::npos) {
-        return std::string();
-    }
-
-    return path.substr(0, pos + 1);
 }
 
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
@@ -320,8 +287,14 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
 
     player->em = em;
 
+    // The images directory is looked up: an installed binary uses the
+    // configured prefix, a binary started from a build tree uses its own
+    // data/images directory.
+    std::string images_dir = app_image_dir();
+    auto indicator_images_dir = images_dir.empty() ? kImagePath : images_dir.c_str();
+
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
-    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
+    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, indicator_images_dir);
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
     app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn, kAppName);
     app_indicator_set_menu(indicator, menu);
@@ -334,7 +307,7 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
     status_icon->signal_popup_menu().connect(sigc::mem_fun(*this, &RadioTrayLite::on_status_icon_popup_menu));
 #else
     install_legacy_appindicator_log_handlers();
-    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, kImagePath);
+    indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, indicator_images_dir);
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
     app_indicator_set_attention_icon(indicator, kAppIndicatorIconOn);
     app_indicator_set_menu(indicator, menu->gobj());
@@ -1051,7 +1024,16 @@ RadioTrayLite::resolve_tray_icon(bool playing, const Glib::ustring& station_name
         LOG(WARNING) << "Couldn't use the tray icon '" << value << "', using the default one";
     }
 
-    // 3. Built-in icon name from the images directory.
+    // 3. Built-in icon from the images directory.
+#ifdef APPINDICATOR_USE_GTK_STATUS_ICON
+    // GtkStatusIcon resolves names through the icon theme, not through the
+    // application images directory, so use the file itself when available.
+    auto file = find_app_image(playing ? kAppIconOn : kAppIconOff);
+    if (not file.empty()) {
+        return file;
+    }
+#endif
+
     return playing ? kAppIndicatorIconOn : kAppIndicatorIconOff;
 }
 

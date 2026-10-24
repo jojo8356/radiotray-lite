@@ -49,6 +49,7 @@ add_executable(
     playlist.cpp
     notification.cpp
     icon_cache.cpp
+    app_paths.cpp
     config.cpp
     options.cpp
     event_manager.cpp
