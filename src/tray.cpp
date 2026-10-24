@@ -46,6 +46,23 @@ is_regular_file(const std::string& path)
     return (stat(path.c_str(), &st) == 0 and S_ISREG(st.st_mode));
 }
 
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+// libayatana-appindicator / libappindicator print a deprecation notice on
+// every start. It is expected and harmless here, so drop only that message and
+// let everything else reach the default handler.
+void
+backend_log_handler(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message, gpointer user_data)
+{
+    static const char* const kDeprecatedNotice = "is deprecated";
+
+    if ((log_level & G_LOG_LEVEL_WARNING) != 0 and message != nullptr and std::strstr(message, kDeprecatedNotice) != nullptr) {
+        return;
+    }
+
+    g_log_default_handler(log_domain, log_level, message, user_data);
+}
+#endif
+
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
 void
 set_menu_item_icon(GMenuItem* item, const std::string& icon_file)
@@ -222,6 +239,10 @@ RadioTrayLite::~RadioTrayLite()
 #if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
     remove_legacy_appindicator_log_handlers();
 #endif
+
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+    remove_backend_log_filter();
+#endif
 }
 
 bool
@@ -292,6 +313,10 @@ RadioTrayLite::init(int argc, char** argv, std::shared_ptr<CmdLineOptions>& opts
     // data/images directory.
     std::string images_dir = app_image_dir();
     auto indicator_images_dir = images_dir.empty() ? kImagePath : images_dir.c_str();
+
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+    install_backend_log_filter();
+#endif
 
 #ifdef APPINDICATOR_USE_AYATANA_GLIB
     indicator = app_indicator_new_with_path(kAppName, kAppIndicatorIconOff, APP_INDICATOR_CATEGORY_APPLICATION_STATUS, indicator_images_dir);
@@ -872,6 +897,31 @@ RadioTrayLite::on_broadcast_info_changed_signal(const Glib::ustring& /*station*/
 
     LOG(DEBUG) << info;
 }
+
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+void
+RadioTrayLite::install_backend_log_filter()
+{
+    static const char* const kDomains[] = { "libayatana-appindicator", "libappindicator" };
+
+    for (const auto* domain : kDomains) {
+        auto id = g_log_set_handler(domain, GLogLevelFlags(G_LOG_LEVEL_MASK | G_LOG_FLAG_FATAL | G_LOG_FLAG_RECURSION), backend_log_handler, nullptr);
+        if (id != 0) {
+            backend_log_handlers.emplace_back(domain, id);
+        }
+    }
+}
+
+void
+RadioTrayLite::remove_backend_log_filter()
+{
+    for (const auto& handler : backend_log_handlers) {
+        g_log_remove_handler(handler.first.c_str(), handler.second);
+    }
+
+    backend_log_handlers.clear();
+}
+#endif
 
 #if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
 void

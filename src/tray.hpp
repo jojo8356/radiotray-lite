@@ -5,6 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <stack>
+#include <utility>
 #include <vector>
 
 #include <sys/stat.h>
@@ -65,6 +66,7 @@ private:
 #else
     guint glib_gobject_log_handler_id = 0;
     guint gdk_log_handler_id = 0;
+    std::vector<std::pair<std::string, guint>> backend_log_handlers;
 #endif
 #endif
 
@@ -159,6 +161,13 @@ private:
 #if !defined(APPINDICATOR_USE_AYATANA_GLIB) && !defined(APPINDICATOR_USE_GTK_STATUS_ICON)
     void install_legacy_appindicator_log_handlers();
     void remove_legacy_appindicator_log_handlers();
+#endif
+
+#ifndef APPINDICATOR_USE_AYATANA_GLIB
+    // Hides the "libayatana-appindicator is deprecated" notice, which is
+    // emitted by the library at startup and cannot be acted upon at runtime.
+    void install_backend_log_filter();
+    void remove_backend_log_filter();
 #endif
 
 #ifdef APPINDICATOR_USE_AYATANA_GLIB

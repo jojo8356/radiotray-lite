@@ -175,6 +175,22 @@ See [RELEASING.md](RELEASING.md) for the complete clone → build → release
 sequence (three `.deb` for Ubuntu 22.04/24.04 and Debian 12, one AppImage,
 checksums, and `gh release create`).
 
+Many stations use AAC or MP3 streams, which need extra GStreamer codecs. They
+are recommended by the package, but if you install manually or use the
+AppImage on a minimal system, add them:
+
+```sh
+sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+```
+
+Without them the player reports `Error: A plugin is missing from your GStreamer
+installation` and skips to the next stream. To see which plugin is missing:
+
+```sh
+sudo apt install gstreamer1.0-tools
+GST_DEBUG=3 gst-play-1.0 "http://your-station/stream" 2>&1 | grep -i "missing\|error"
+```
+
 The generated packages require `gstreamer1.0-plugins-base` and
 `gstreamer1.0-plugins-good` by default. `gstreamer1.0-plugins-bad` is optional
 because it can be unavailable or temporarily uninstallable on some
@@ -273,8 +289,16 @@ and an image (checked through the `Content-Type` header and the file
 signature). Icons that are missing or cannot be loaded are ignored and the
 entry is displayed without an image.
 
-Any format supported by GdkPixbuf works: PNG, JPEG, GIF, BMP, WEBP, SVG and
-XPM. Icons are scaled down to the menu size; use square images of at least
+Only files that GdkPixbuf can decode are accepted: PNG, JPEG, GIF, BMP, WEBP,
+SVG and XPM (with the corresponding loaders installed). An invalid file — an
+HTML error page saved by hand, a truncated download, a format without a
+loader — is detected and ignored, and a previously cached file that turns out
+to be unreadable is downloaded again. To check a file by hand:
+
+```sh
+file ~/.config/radiotray-lite/icons/paradise.png
+gdk-pixbuf-thumbnailer ~/.config/radiotray-lite/icons/paradise.png /tmp/out.png
+``` Icons are scaled down to the menu size; use square images of at least
 32x32 pixels for a sharp result.
 
 Use *Reload Bookmarks* from the menu to retry icons that failed to download.

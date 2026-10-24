@@ -15,6 +15,9 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE @CPACK_DEBIAN_PACKAGE_ARCHITECTURE@)
 set(CPACK_PACKAGE_FILE_NAME ${CPACK_PACKAGE_NAME}_${APP_VERSION}_@CPACK_DEBIAN_PACKAGE_ARCHITECTURE@)
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "@RADIOTRAY_DEBIAN_GSTREAMER_PLUGIN_DEPENDS@")
+# Codecs for the streams that are not covered by plugins-base/good (AAC, MP3,
+# WMA...). Recommends, not Depends: the player still works without them.
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav")
 
 set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/share/applications;/usr/share/pixmaps")
 set(CPACK_RPM_PACKAGE_URL "https://github.com/thekvs/radiotray-lite/")

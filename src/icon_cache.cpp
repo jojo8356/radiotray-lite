@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include <curl/curl.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "constants.hpp"
 #include "easyloggingpp/easylogging++.h"
@@ -74,6 +75,9 @@ is_dir(const std::string& path)
     return (stat(path.c_str(), &st) == 0 and S_ISDIR(st.st_mode));
 }
 
+// A file is usable as an icon only when GdkPixbuf knows a loader for it: an
+// empty file, an HTML error page saved by a previous download, or a truncated
+// image would otherwise be treated as a valid icon and fail at display time.
 bool
 is_usable_file(const std::string& path)
 {
@@ -83,12 +87,18 @@ is_usable_file(const std::string& path)
 
     struct stat st;
     std::memset(&st, 0, sizeof(st));
-    if (stat(path.c_str(), &st) != 0) {
+    if (stat(path.c_str(), &st) != 0 or st.st_size == 0) {
         return false;
     }
 
-    // An empty file is a failed download, not an icon.
-    return st.st_size > 0;
+    return (gdk_pixbuf_get_file_info(path.c_str(), nullptr, nullptr) != nullptr);
+}
+
+// Cheap check on the first bytes, used before GdkPixbuf sees the file.
+bool
+is_loadable_image(const std::string& path)
+{
+    return (gdk_pixbuf_get_file_info(path.c_str(), nullptr, nullptr) != nullptr);
 }
 
 std::string
@@ -381,7 +391,12 @@ IconCache::do_resolve(const std::string& icon, const std::string& icon_path, con
             return path;
         }
 
-        LOG(WARNING) << "Icon file not found: '" << path << "'";
+        if (is_regular_file(path)) {
+            LOG(WARNING) << "Icon file is not a readable image: '" << path << "'";
+        } else {
+            LOG(WARNING) << "Icon file not found: '" << path << "'";
+        }
+
         return std::string();
     }
 
@@ -401,6 +416,12 @@ IconCache::do_resolve(const std::string& icon, const std::string& icon_path, con
     if (is_usable_file(destination)) {
         LOG(DEBUG) << "Using cached icon '" << destination << "' for " << icon;
         return destination;
+    }
+
+    if (is_regular_file(destination)) {
+        // Typically an HTML error page saved by an earlier download, or a file
+        // whose format GdkPixbuf can't read (AVIF without loader, ...).
+        LOG(WARNING) << "Cached icon '" << destination << "' is not a readable image, downloading it again";
     }
 
     LOG(INFO) << "Downloading icon " << icon << " to '" << destination << "'";
@@ -493,6 +514,14 @@ IconCache::download(const std::string& url, const std::string& destination)
     if (not ctype_is_image and not file_looks_like_image(tmp_file)) {
         LOG(WARNING) << "Downloaded data from " << url << " is not an image (Content-Type: '"
                      << (content_type != nullptr ? content_type : "") << "')";
+        unlink(tmp_file.c_str());
+        return false;
+    }
+
+    // Last check: the file must be loadable by GdkPixbuf, otherwise it could
+    // never be displayed (and it would be cached as a broken icon).
+    if (not is_loadable_image(tmp_file)) {
+        LOG(WARNING) << "Downloaded file from " << url << " can't be decoded as an image by GdkPixbuf";
         unlink(tmp_file.c_str());
         return false;
     }

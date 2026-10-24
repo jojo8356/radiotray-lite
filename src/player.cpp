@@ -124,6 +124,22 @@ Player::on_bus_message(const Glib::RefPtr<Gst::Bus>& /*bus*/, const Glib::RefPtr
             Glib::Error err = error_msg->parse();
 #endif
             e.append(": ").append(err.what());
+
+            // "A plugin is missing in your GStreamer installation" is the most
+            // common failure (AAC/MP3/Opus streams); tell which packages to
+            // install instead of leaving the user with a cryptic message.
+            if (err.matches(gst_core_error_quark(), GST_CORE_ERROR_MISSING_PLUGIN)) {
+                LOG(ERROR) << "GStreamer plugin missing for this stream. Install the codecs, for example: "
+                           << "sudo apt install gstreamer1.0-plugins-base gstreamer1.0-plugins-good "
+                           << "gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav";
+
+#if GSTREAMERMM_MAJOR_VERSION == 1 and GSTREAMERMM_MINOR_VERSION >= 8
+                auto debug = error_msg->parse_debug();
+                if (not debug.empty()) {
+                    LOG(ERROR) << "GStreamer detail: " << debug;
+                }
+#endif
+            }
         }
 
         LOG(ERROR) << e;
